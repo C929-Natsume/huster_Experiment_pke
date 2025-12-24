@@ -12,6 +12,8 @@
 
 #include "spike_interface/spike_utils.h"
 
+#include "memlayout.h"
+
 //
 // handling the syscalls. will call do_syscall() defined in kernel/syscall.c
 //
@@ -66,6 +68,9 @@ void handle_user_page_fault(uint64 mcause, uint64 sepc, uint64 stval) {
       // dynamically increase application stack.
       // hint: first allocate a new physical page, and then, maps the new page to the
       // virtual address that causes the page fault.
+      if (stval > USER_STACK_TOP || stval <= g_ufree_page) {
+        panic("this address is not available!");
+      }
       void* pa = alloc_page();
       uint64 va_page = stval & ~(PGSIZE - 1);
       user_vm_map((pagetable_t)current->pagetable, va_page, PGSIZE, (uint64)pa, prot_to_type(PROT_WRITE | PROT_READ, 1));
