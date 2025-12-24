@@ -138,3 +138,153 @@ void load_bincode_from_host_elf(process *p) {
 
   sprint("Application program entry point (virtual address): 0x%lx\n", p->trapframe->epc);
 }
+
+char* find_func_name(uint64 return_address){
+  static char func_name_buf[256];
+  
+  // 定义静态缓冲区
+  #define MAX_SECTIONS 256
+  #define MAX_STRTAB_SIZE 65536
+  #define MAX_SYMTAB_SIZE 1048576
+  
+  static Elf64_Shdr shdr_buf[MAX_SECTIONS];
+  static char shstrtab_buf[MAX_STRTAB_SIZE];
+  static char strtab_buf[MAX_STRTAB_SIZE];
+  static Elf64_Sym symtab_buf[MAX_SYMTAB_SIZE / sizeof(Elf64_Sym)];
+
+  arg_buf arg_bug_msg;
+  size_t argc = parse_args(&arg_bug_msg);
+  if (!argc) return NULL;
+  
+  const char *elf_path = arg_bug_msg.argv[0]; 
+  spike_file_t *f = spike_file_open(elf_path, O_RDONLY, 0);
+  if (IS_ERR_VALUE(f)) 
+    return NULL;
+  
+  // 读取 ELF header
+  elf_header ehdr;
+  if (spike_file_pread(f, &ehdr, sizeof(ehdr), 0) != sizeof(ehdr)) {
+    spike_file_close(f);
+    return NULL;
+  }
+
+  // 检查 magic number
+  if (ehdr.magic != ELF_MAGIC) {
+    spike_file_close(f);
+    return NULL;
+  }
+
+  // 检查 Section Header 数量
+  if (ehdr.shnum > MAX_SECTIONS) {
+    spike_file_close(f);
+    return NULL;
+  }
+
+  // 读取所有 Section Headers
+  if (spike_file_pread(f, shdr_buf, 
+                      ehdr.shnum * sizeof(Elf64_Shdr), 
+                      ehdr.shoff) != ehdr.shnum * sizeof(Elf64_Shdr)) {
+    spike_file_close(f);
+    return NULL;
+  }
+
+  // 读取 .shstrtab
+  Elf64_Shdr *shstrtab_shdr = &shdr_buf[ehdr.shstrndx];
+  if (shstrtab_shdr->sh_size > MAX_STRTAB_SIZE) {
+    spike_file_close(f);
+    return NULL;
+  }
+  
+  if (spike_file_pread(f, shstrtab_buf, shstrtab_shdr->sh_size, 
+                      shstrtab_shdr->sh_offset) != shstrtab_shdr->sh_size) {
+    spike_file_close(f);
+    return NULL;
+  }
+
+  // .symtab & .strtab
+  Elf64_Shdr *symtab_shdr = NULL;
+  Elf64_Shdr *strtab_shdr = NULL;
+  
+  for (int i = 0; i < ehdr.shnum; i++) {
+    const char *name = shstrtab_buf + shdr_buf[i].sh_name;
+    if (strcmp(name, ".symtab") == 0) {
+      symtab_shdr = &shdr_buf[i];
+    } else if (strcmp(name, ".strtab") == 0) {
+      strtab_shdr = &shdr_buf[i];
+    }
+  }
+
+  if (!symtab_shdr || !strtab_shdr) {
+    spike_file_close(f);
+    return NULL;
+  }
+
+  // 检查大小
+  if (strtab_shdr->sh_size > MAX_STRTAB_SIZE || 
+      symtab_shdr->sh_size > MAX_SYMTAB_SIZE) {
+    spike_file_close(f);
+    return NULL;
+  }
+
+  // 读取 .strtab
+  if (spike_file_pread(f, strtab_buf, strtab_shdr->sh_size, 
+                      strtab_shdr->sh_offset) != strtab_shdr->sh_size) {
+    spike_file_close(f);
+    return NULL;
+  }
+
+  // 读取 .symtab
+  int num_symbols = symtab_shdr->sh_size / sizeof(Elf64_Sym);
+  if (num_symbols > (MAX_SYMTAB_SIZE / sizeof(Elf64_Sym))) {
+    spike_file_close(f);
+    return NULL;
+  }
+  
+  if (spike_file_pread(f, symtab_buf, symtab_shdr->sh_size, 
+                      symtab_shdr->sh_offset) != symtab_shdr->sh_size) {
+    spike_file_close(f);
+    return NULL;
+  }
+
+  // 查找匹配的符号
+  Elf64_Sym *best_match = NULL;
+  
+  for (int i = 0; i < num_symbols; i++) {
+    uint8_t type = ELF64_ST_TYPE(symtab_buf[i].st_info);
+    if (type != STT_FUNC) continue;
+    if (symtab_buf[i].st_value == 0) continue;
+    
+    if (symtab_buf[i].st_value <= return_address) {
+      if (symtab_buf[i].st_size == 0) {
+        if (symtab_buf[i].st_value == return_address) {
+          if (!best_match || symtab_buf[i].st_value > best_match->st_value) {
+            best_match = &symtab_buf[i];
+          }
+        }
+      } else {
+        if (return_address < symtab_buf[i].st_value + symtab_buf[i].st_size) {
+          if (!best_match || symtab_buf[i].st_value > best_match->st_value) {
+            best_match = &symtab_buf[i];
+          }
+        }
+      }
+    }
+  }
+
+  char *result = NULL;
+  if (best_match) {
+    const char *name = strtab_buf + best_match->st_name;
+    char *dest = func_name_buf;
+    size_t max_len = sizeof(func_name_buf) - 1;
+    size_t i = 0;
+    while (i < max_len && name[i] != '\0') {
+      dest[i] = name[i];
+      i++;
+    }
+    dest[i] = '\0'; 
+    result = func_name_buf;
+  }
+
+  spike_file_close(f);
+  return result;
+}
