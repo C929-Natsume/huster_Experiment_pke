@@ -13,6 +13,7 @@
 #include "pmm.h"
 #include "vmm.h"
 #include "sched.h"
+#include "process.h"
 
 #include "spike_interface/spike_utils.h"
 
@@ -35,6 +36,12 @@ ssize_t sys_user_exit(uint64 code) {
   sprint("User exit with code:%d.\n", code);
   // reclaim the current process, and reschedule. added @lab3_1
   free_process( current );
+
+  if (current->parent && current->parent->status == BLOCKED) {
+    current->parent->status = READY;
+    insert_to_ready_queue(current->parent);
+  }
+  
   schedule();
   return 0;
 }
@@ -96,6 +103,37 @@ ssize_t sys_user_yield() {
   return 0;
 }
 
+ssize_t sys_user_wait(int pid){
+  if (pid == -1) {
+    while(1) {
+      for(int i = 0; i < NPROC; i++){
+        if(procs[i].parent == current && procs[i].status == ZOMBIE){
+          pid = procs[i].pid;
+          free_process(&procs[i]);
+          return pid;
+        }
+      }
+      current->status = BLOCKED;
+      schedule();
+    }
+  }
+  
+  if(pid < 0 || pid >= NPROC || procs[pid].parent != current){
+    return -1;
+  }
+  
+  while(procs[pid].status != ZOMBIE) {
+    current->status = BLOCKED;
+    schedule(); 
+    if(procs[pid].parent != current || procs[pid].status == FREE) {
+      return -1;
+    }
+  }
+  
+  free_process(&procs[pid]);
+  return pid;
+}
+
 //
 // [a0]: the syscall number; [a1] ... [a7]: arguments to the syscalls.
 // returns the code of success, (e.g., 0 means success, fail for otherwise)
@@ -115,6 +153,8 @@ long do_syscall(long a0, long a1, long a2, long a3, long a4, long a5, long a6, l
       return sys_user_fork();
     case SYS_user_yield:
       return sys_user_yield();
+    case SYS_user_wait:
+      return sys_user_wait(a1);
     default:
       panic("Unknown syscall %ld \n", a0);
   }

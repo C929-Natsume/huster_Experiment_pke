@@ -243,6 +243,24 @@ int do_fork( process* parent)
         child->mapped_info[child->total_mapped_region].seg_type = CODE_SEGMENT;
         child->total_mapped_region++;
         break;
+
+      case DATA_SEGMENT:
+        uint64 data_va = parent->mapped_info[i].va;
+        for (int pg = 0; pg < parent->mapped_info[i].npages; pg++) {
+          uint64 page_va = data_va + pg * PGSIZE;
+          uint64 page_pa = lookup_pa(parent->pagetable, page_va);
+          void* new_pa = alloc_page();
+          memcpy(new_pa, (void*)page_pa, PGSIZE);
+          user_vm_map((pagetable_t)child->pagetable, page_va, PGSIZE,
+                      (uint64)new_pa, prot_to_type(PROT_WRITE | PROT_READ, 1));
+        }
+
+        child->mapped_info[child->total_mapped_region].va = parent->mapped_info[i].va;
+        child->mapped_info[child->total_mapped_region].npages =
+          parent->mapped_info[i].npages;
+        child->mapped_info[child->total_mapped_region].seg_type = DATA_SEGMENT;
+        child->total_mapped_region++;
+        break;
     }
   }
 
