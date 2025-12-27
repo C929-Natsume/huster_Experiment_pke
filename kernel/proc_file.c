@@ -221,3 +221,11 @@ int do_link(char *oldpath, char *newpath) {
 int do_unlink(char *path) {
   return vfs_unlink(path);
 }
+
+int do_rcwd(struct dentry *cwd, char *pathbuf) {
+  return vfs_rcwd(cwd, pathbuf);
+}
+
+int do_ccwd(struct dentry *cwd, char *pathbuf) {
+  return vfs_ccwd(cwd, pathbuf);
+}

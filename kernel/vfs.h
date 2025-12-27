@@ -75,6 +75,9 @@ struct dentry *hash_get_dentry(struct dentry *parent, char *name);
 int hash_put_dentry(struct dentry *dentry);
 int hash_erase_dentry(struct dentry *dentry);
 
+int vfs_rcwd(struct dentry *cwd, char *pathbuf);
+int vfs_ccwd(struct dentry *cwd, char *pathbuf);
+
 // data structure of an openned file
 struct file {
   int status;

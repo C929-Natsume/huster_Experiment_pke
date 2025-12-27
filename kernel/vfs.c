@@ -9,6 +9,7 @@
 #include "util/string.h"
 #include "util/types.h"
 #include "util/hash_table.h"
+#include "process.h"
 
 struct dentry *vfs_root_dentry;               // system root direntry
 struct super_block *vfs_sb_list[MAX_MOUNTS];  // system superblock list
@@ -110,6 +111,14 @@ struct super_block *vfs_mount(const char *dev_name, int mnt_type) {
 //
 struct file *vfs_open(const char *path, int flags) {
   struct dentry *parent = vfs_root_dentry; // we start the path lookup from root.
+  if(path[0] == '.' && path[1] == '/') {
+    parent = current->pfiles->cwd;
+    path = path + 2;
+  }
+  if(path[0] == '.' && path[1] == '.' && path[2] == '/') {
+    parent = current->pfiles->cwd->parent;
+    path = path + 3;
+  }
   char miss_name[MAX_PATH_LEN];
 
   // path lookup.
@@ -261,6 +270,14 @@ int vfs_disk_stat(struct file *file, struct istat *istat) {
 //
 int vfs_link(const char *oldpath, const char *newpath) {
   struct dentry *parent = vfs_root_dentry;
+  if(oldpath[0] == '.' && oldpath[1] == '/') {
+    parent = current->pfiles->cwd;
+    oldpath = oldpath + 2;
+  }
+  if(oldpath[0] == '.' && oldpath[1] == '.' && oldpath[2] == '/') {
+    parent = current->pfiles->cwd->parent;
+    oldpath = oldpath + 3;
+  }
   char miss_name[MAX_PATH_LEN];
 
   // lookup oldpath
@@ -311,6 +328,14 @@ int vfs_link(const char *oldpath, const char *newpath) {
 //
 int vfs_unlink(const char *path) {
   struct dentry *parent = vfs_root_dentry;
+  if(path[0] == '.' && path[1] == '/') {
+    parent = current->pfiles->cwd;
+    path = path + 2;
+  }
+  if(path[0] == '.' && path[1] == '.' && path[2] == '/') {
+    parent = current->pfiles->cwd->parent;
+    path = path + 3;
+  }
   char miss_name[MAX_PATH_LEN];
 
   // lookup the file, find its parent direntry
@@ -351,6 +376,63 @@ int vfs_unlink(const char *path) {
   }
   
 
+  return 0;
+}
+
+int vfs_rcwd(struct dentry *cwd, char *pathbuf) {
+  if (!cwd || !pathbuf) {
+    sprint("vfs_rcwd: invalid parameters!\n");
+    return -1;
+  }
+
+  if (cwd == vfs_root_dentry) {
+    strcpy(pathbuf, "/");
+    return 0;
+  }
+
+  struct dentry *cur = cwd;
+  char temp_buf[MAX_PATH_LEN];
+  temp_buf[0] = '\0';
+
+  while (cur != vfs_root_dentry) {
+    char new_buf[MAX_PATH_LEN];
+    strcpy(new_buf, "/");
+    strcat(new_buf, cur->name);
+    strcat(new_buf, temp_buf);
+    strcpy(temp_buf, new_buf);
+    cur = cur->parent;
+  }
+  strcpy(pathbuf, temp_buf);
+  
+  return 0;
+}
+
+int vfs_ccwd(struct dentry *cwd, char *pathbuf) {
+  if (!cwd || !pathbuf) {
+    sprint("vfs_ccwd: invalid parameters!\n");
+    return -1;
+  }
+
+  struct dentry *parent;
+  char miss_name[MAX_PATH_LEN];
+  
+  if (pathbuf[0] == '/') {
+    parent = vfs_root_dentry;
+  } else {
+    parent = cwd;
+  }
+  
+  struct dentry *target_dentry = lookup_final_dentry(pathbuf, &parent, miss_name);
+  
+  if (!target_dentry) {
+    sprint("vfs_ccwd: cannot find the directory: %s\n", pathbuf);
+    return -1;
+  }
+  if (target_dentry->dentry_inode->type != DIR_I) {
+    sprint("vfs_ccwd: %s is not a directory!\n", pathbuf);
+    return -1;
+  }
+  current->pfiles->cwd = target_dentry;
   return 0;
 }
 
@@ -400,6 +482,14 @@ int vfs_close(struct file *file) {
 //
 struct file *vfs_opendir(const char *path) {
   struct dentry *parent = vfs_root_dentry;
+  if(path[0] == '.' && path[1] == '/') {
+    parent = current->pfiles->cwd;
+    path = path + 2;
+  }
+  if(path[0] == '.' && path[1] == '.' && path[2] == '/') {
+    parent = current->pfiles->cwd->parent;
+    path = path + 3;
+  }
   char miss_name[MAX_PATH_LEN];
 
   // lookup the dir
@@ -444,6 +534,14 @@ int vfs_readdir(struct file *file, struct dir *dir) {
 //
 int vfs_mkdir(const char *path) {
   struct dentry *parent = vfs_root_dentry;
+  if(path[0] == '.' && path[1] == '/') {
+    parent = current->pfiles->cwd;
+    path = path + 2;
+  }
+  if(path[0] == '.' && path[1] == '.' && path[2] == '/') {
+    parent = current->pfiles->cwd->parent;
+    path = path + 3;
+  }
   char miss_name[MAX_PATH_LEN];
 
   // lookup the dir, find its parent direntry
@@ -510,6 +608,24 @@ int vfs_closedir(struct file *file) {
 struct dentry *lookup_final_dentry(const char *path, struct dentry **parent,
                                    char *miss_name) {
   char path_copy[MAX_PATH_LEN];
+  
+  if(path[0] == '.' && path[1] == '/') {
+    *parent = *parent;
+    path = path + 2;
+  }
+  if(path[0] == '.' && path[1] == '.' && path[2] == '/') {
+    *parent = (*parent)->parent;
+    path = path + 3;
+  }
+  if(path[0] == '.' && path[1] == '\0') {
+    *parent = *parent;
+    return *parent;
+  }
+  if(path[0] == '.' && path[1] == '.' && path[2] == '\0') {
+    *parent = (*parent)->parent;
+    return *parent;
+  }
+
   strcpy(path_copy, path);
 
   // split the path, and retrieves a token at a time.
