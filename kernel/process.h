@@ -26,6 +26,9 @@ typedef struct process_t {
   pagetable_t pagetable;
   // trapframe storing the context of a (User mode) process.
   trapframe* trapframe;
+
+  // add size
+  uint64 size;
 }process;
 
 // switch to run user app
