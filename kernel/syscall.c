@@ -18,6 +18,7 @@
 #include "spike_interface/spike_utils.h"
 
 #include "process.h"
+#include "elf.h"
 
 //
 // implement the SYS_user_print syscall
@@ -291,6 +292,13 @@ ssize_t sys_user_wait(int pid)
   return pid;
 }
 
+ssize_t sys_user_exec(char *pathva, const char *argv)
+{
+  char *pathpa = (char *)user_va_to_pa((pagetable_t)(current->pagetable), pathva);
+  char *argvpa = (char *)user_va_to_pa((pagetable_t)(current->pagetable), (void *)argv);
+  return do_exec(current, pathpa, argvpa);
+}
+
 //
 // [a0]: the syscall number; [a1] ... [a7]: arguments to the syscalls.
 // returns the code of success, (e.g., 0 means success, fail for otherwise)
@@ -342,7 +350,7 @@ long do_syscall(long a0, long a1, long a2, long a3, long a4, long a5, long a6, l
   case SYS_user_unlink:
     return sys_user_unlink((char *)a1);
   case SYS_user_exec:
-    return sys_user_exec((char *)a1, (char **)a2);
+    return sys_user_exec((char *)a1, (char *)a2);
   case SYS_user_wait:
     return sys_user_wait(a1);
   default:
