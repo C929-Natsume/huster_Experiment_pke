@@ -159,39 +159,99 @@ void load_bincode_from_host_elf(process *p, char *filename)
   sprint("Application program entry point (virtual address): 0x%lx\n", p->trapframe->epc);
 }
 
+// int do_exec(process *p, char *path, char *argv)
+// {
+//   clr_proc(p);
+//   sprint("Application: %s\n", path);
+
+//   // elf loading. elf_ctx is defined in kernel/elf.h, used to track the loading process.
+//   elf_ctx elfloader;
+//   // elf_info is defined above, used to tie the elf file and its corresponding process.
+//   elf_info info;
+
+//   info.f = vfs_open(path, O_RDONLY);
+//   info.p = p;
+//   // IS_ERR_VALUE is a macro defined in spike_interface/spike_htif.h
+//   if (IS_ERR_VALUE(info.f))
+//     panic("Fail on openning the input application program.\n");
+
+//   // init elfloader context. elf_init() is defined above.
+//   if (elf_init(&elfloader, &info) != EL_OK)
+//     panic("fail to init elfloader.\n");
+
+//   // load elf. elf_load() is defined above.
+//   if (elf_load(&elfloader) != EL_OK)
+//     panic("Fail on loading elf.\n");
+
+//   // entry (virtual, also physical in lab1_x) address
+//   p->trapframe->epc = elfloader.ehdr.entry;
+
+//   // close the vfs file
+//   vfs_close(info.f);
+
+//   sprint("Application program entry point (virtual address): 0x%lx\n", p->trapframe->epc);
+
+//   // heap
+//   uint64 va = p->user_heap.heap_top;
+//   void *pa = alloc_page();
+//   p->user_heap.heap_top += PGSIZE;
+//   p->mapped_info[HEAP_SEGMENT].npages++;
+//   user_vm_map((pagetable_t)p->pagetable, va, PGSIZE, (uint64)pa, prot_to_type(PROT_WRITE | PROT_READ, 1));
+
+//   p->trapframe->regs.a0 = 1;
+//   p->trapframe->regs.a1 = va;
+
+//   va = p->user_heap.heap_top;
+//   p->user_heap.heap_top += PGSIZE;
+//   p->mapped_info[HEAP_SEGMENT].npages++;
+//   user_vm_map((pagetable_t)p->pagetable, va, PGSIZE, (uint64)argv, prot_to_type(PROT_WRITE | PROT_READ, 1));
+//   *((char **)pa) = (char *)va;
+
+//   return 0;
+// }
+#define MAX_ARGV_LEN 256
+
 int do_exec(process *p, char *path, char *argv)
 {
+  char argv_buf[MAX_ARGV_LEN];
+  if (argv)
+  {
+    size_t len = 0;
+    while (len < MAX_ARGV_LEN - 1 && ((char *)argv)[len] != '\0')
+      len++;
+    len++;
+    if (len > MAX_ARGV_LEN)
+      len = MAX_ARGV_LEN;
+    memcpy(argv_buf, (void *)argv, len);
+    argv_buf[MAX_ARGV_LEN - 1] = '\0';
+  }
+  else
+  {
+    argv_buf[0] = '\0';
+  }
+
   clr_proc(p);
   sprint("Application: %s\n", path);
 
-  // elf loading. elf_ctx is defined in kernel/elf.h, used to track the loading process.
   elf_ctx elfloader;
-  // elf_info is defined above, used to tie the elf file and its corresponding process.
   elf_info info;
 
   info.f = vfs_open(path, O_RDONLY);
   info.p = p;
-  // IS_ERR_VALUE is a macro defined in spike_interface/spike_htif.h
   if (IS_ERR_VALUE(info.f))
     panic("Fail on openning the input application program.\n");
 
-  // init elfloader context. elf_init() is defined above.
   if (elf_init(&elfloader, &info) != EL_OK)
     panic("fail to init elfloader.\n");
 
-  // load elf. elf_load() is defined above.
   if (elf_load(&elfloader) != EL_OK)
     panic("Fail on loading elf.\n");
 
-  // entry (virtual, also physical in lab1_x) address
   p->trapframe->epc = elfloader.ehdr.entry;
-
-  // close the vfs file
   vfs_close(info.f);
 
   sprint("Application program entry point (virtual address): 0x%lx\n", p->trapframe->epc);
 
-  // heap
   uint64 va = p->user_heap.heap_top;
   void *pa = alloc_page();
   p->user_heap.heap_top += PGSIZE;
@@ -201,11 +261,15 @@ int do_exec(process *p, char *path, char *argv)
   p->trapframe->regs.a0 = 1;
   p->trapframe->regs.a1 = va;
 
-  va = p->user_heap.heap_top;
+  uint64 va_str = p->user_heap.heap_top;
+  void *pa_str = alloc_page();
   p->user_heap.heap_top += PGSIZE;
   p->mapped_info[HEAP_SEGMENT].npages++;
-  user_vm_map((pagetable_t)p->pagetable, va, PGSIZE, (uint64)argv, prot_to_type(PROT_WRITE | PROT_READ, 1));
-  *((char **)pa) = (char *)va;
+  memset(pa_str, 0, PGSIZE);
+  memcpy(pa_str, argv_buf, MAX_ARGV_LEN);
+  user_vm_map((pagetable_t)p->pagetable, va_str, PGSIZE, (uint64)pa_str, prot_to_type(PROT_WRITE | PROT_READ, 1));
+
+  *((char **)pa) = (char *)va_str;
 
   return 0;
 }

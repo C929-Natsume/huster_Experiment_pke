@@ -36,4 +36,6 @@ int unlink_u(const char *fn);
 int exec(const char *pathname, const char *argv);
 int wait(int pid);
 
+// int print_backtrace(int depth);
+
 #endif
