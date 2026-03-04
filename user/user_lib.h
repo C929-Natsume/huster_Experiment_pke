@@ -8,6 +8,7 @@
 #include "kernel/proc_file.h"
 
 int printu(const char *s, ...);
+void printpa(int *va);
 int exit(int code);
 void *naive_malloc();
 void naive_free(void *va);
@@ -35,6 +36,10 @@ int unlink_u(const char *fn);
 
 int exec(const char *pathname, const char *argv);
 int wait(int pid);
+
+int sem_new(int init_val);
+void sem_P(int sid);
+void sem_V(int sid);
 
 // int print_backtrace(int depth);
 

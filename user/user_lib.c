@@ -45,6 +45,11 @@ int printu(const char *s, ...)
   return do_user_call(SYS_user_print, (uint64)buf, n, 0, 0, 0, 0, 0);
 }
 
+void printpa(int *va)
+{
+  do_user_call(SYS_user_printpa, (uint64)va, 0, 0, 0, 0, 0, 0);
+}
+
 //
 // applications need to call exit to quit execution.
 //
@@ -196,6 +201,19 @@ int exec(const char *pathname, const char *argv)
 int wait(int pid)
 {
   return do_user_call(SYS_user_wait, pid, 0, 0, 0, 0, 0, 0);
+}
+
+int sem_new(int init_val)
+{
+  return do_user_call(SYS_user_semNew, init_val, 0, 0, 0, 0, 0, 0);
+}
+void sem_P(int sid)
+{
+  do_user_call(SYS_user_semP, sid, 0, 0, 0, 0, 0, 0);
+}
+void sem_V(int sid)
+{
+  do_user_call(SYS_user_semV, sid, 0, 0, 0, 0, 0, 0);
 }
 
 // int print_backtrace(int depth)

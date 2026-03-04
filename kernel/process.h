@@ -101,6 +101,14 @@ typedef struct process_t
   proc_file_management *pfiles;
 } process;
 
+#define NSEM 32
+typedef struct semaphore_t
+{
+  int ifuse;
+  int value;
+  process *wait_queue;
+} semaphore;
+
 // switch to run user app
 void switch_to(process *);
 
@@ -114,6 +122,10 @@ int free_process(process *proc);
 int do_fork(process *parent);
 
 void clr_proc(process *proc);
+
+int do_semNew(uint64 init_val);
+void do_semP(uint64 sid);
+void do_semV(uint64 sid);
 
 // current running process
 extern process *current;

@@ -12,6 +12,9 @@
 #define MSTATUS_MIE (1L << 3)       // machine-mode interrupt enable
 #define MSTATUS_MPIE (1L << 7)      // preserve MIE bit
 
+#define PTE_RSW (1L << 8)
+#define PTE_COW PTE_RSW
+
 // values of mcause, the Machine Cause register
 #define IRQ_S_EXT 9   // s-mode external interrupt
 #define IRQ_S_TIMER 5 // s-mode timer interrupt

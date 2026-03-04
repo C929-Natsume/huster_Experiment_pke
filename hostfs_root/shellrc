@@ -6,4 +6,7 @@
 /bin/app_ls /RAMDISK0/sub_dir
 /bin/app_ls /RAMDISK0
 /bin/app_exec NULL
+/bin/app_wait NULL
+/bin/app_semaphore NULL
+/bin/app_cow NULL
 END END

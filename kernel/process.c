@@ -28,6 +28,7 @@ extern char trap_sec_start[];
 
 // process pool. added @lab3_1
 process procs[NPROC];
+semaphore sem_table[NSEM];
 
 // current points to the currently running user-mode application.
 process *current = NULL;
@@ -82,6 +83,13 @@ void init_proc_pool()
   {
     procs[i].status = FREE;
     procs[i].pid = i;
+  }
+
+  for (int i = 0; i < NSEM; i++)
+  {
+    sem_table[i].ifuse = 0;
+    sem_table[i].value = 0;
+    sem_table[i].wait_queue = NULL;
   }
 }
 
@@ -225,10 +233,16 @@ int do_fork(process *parent)
         if (free_block_filter[(heap_block - heap_bottom) / PGSIZE]) // skip free blocks
           continue;
 
-        void *child_pa = alloc_page();
-        memcpy(child_pa, (void *)lookup_pa(parent->pagetable, heap_block), PGSIZE);
-        user_vm_map((pagetable_t)child->pagetable, heap_block, PGSIZE, (uint64)child_pa,
-                    prot_to_type(PROT_WRITE | PROT_READ, 1));
+        // void *child_pa = alloc_page();
+        // memcpy(child_pa, (void *)lookup_pa(parent->pagetable, heap_block), PGSIZE);
+        // user_vm_map((pagetable_t)child->pagetable, heap_block, PGSIZE, (uint64)child_pa,
+        //             prot_to_type(PROT_WRITE | PROT_READ, 1));
+        uint64 pa = lookup_pa(parent->pagetable, heap_block);
+        if (pa == 0)
+          continue;
+        user_vm_map_cow((pagetable_t)child->pagetable, heap_block, PGSIZE, pa);
+        user_vm_set_cow((pagetable_t)parent->pagetable, heap_block);
+        inc_page_ref((void *)pa);
       }
 
       child->mapped_info[HEAP_SEGMENT].npages = parent->mapped_info[HEAP_SEGMENT].npages;
@@ -350,4 +364,68 @@ void clr_proc(process *proc)
     proc->pfiles->opened_files[fd].status = FD_NONE;
 
   proc->status = READY;
+}
+
+int do_semNew(uint64 init_val)
+{
+  for (int i = 0; i < NSEM; i++)
+  {
+    if (sem_table[i].ifuse == 0)
+    {
+      sem_table[i].ifuse = 1;
+      sem_table[i].value = (int)init_val;
+      sem_table[i].wait_queue = NULL;
+      return i;
+    }
+  }
+  return -1;
+}
+
+void do_semP(uint64 sid)
+{
+  if (sid >= (uint64)NSEM || sem_table[sid].ifuse == 0)
+  {
+    panic("do_semP: invalid sid\n");
+    return;
+  }
+  semaphore *sem = &sem_table[sid];
+  if (sem->value > 0)
+  {
+    sem->value--;
+    return;
+  }
+
+  current->queue_next = NULL;
+  if (sem->wait_queue == NULL)
+  {
+    sem->wait_queue = current;
+  }
+  else
+  {
+    process *p = sem->wait_queue;
+    while (p->queue_next != NULL)
+      p = p->queue_next;
+    p->queue_next = current;
+  }
+  current->status = BLOCKED;
+  schedule();
+}
+
+void do_semV(uint64 sid)
+{
+  if (sid >= (uint64)NSEM || sem_table[sid].ifuse == 0)
+  {
+    panic("do_semV: invalid sid\n");
+    return;
+  }
+  semaphore *sem = &sem_table[sid];
+  sem->value++;
+  if (sem->wait_queue != NULL)
+  {
+    process *p = sem->wait_queue;
+    sem->wait_queue = p->queue_next;
+    p->queue_next = NULL;
+    sem->value--;
+    insert_to_ready_queue(p);
+  }
 }

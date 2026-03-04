@@ -112,6 +112,24 @@ USER_EXEC_OBJS  		:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_EXEC_CPP
 
 USER_EXEC_TARGET 	:= $(HOSTFS_ROOT)/bin/app_exec
 
+USER_WAIT_CPPS 		:= user/app_wait.c user/user_lib.c
+
+USER_WAIT_OBJS  		:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_WAIT_CPPS)))
+
+USER_WAIT_TARGET 	:= $(HOSTFS_ROOT)/bin/app_wait
+
+USER_SEM_CPPS 		:= user/app_semaphore.c user/user_lib.c
+
+USER_SEM_OBJS  		:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_SEM_CPPS)))
+
+USER_SEM_TARGET 	:= $(HOSTFS_ROOT)/bin/app_semaphore
+
+USER_COW_CPPS 		:= user/app_cow.c user/user_lib.c
+
+USER_COW_OBJS  		:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_COW_CPPS)))
+
+USER_COW_TARGET 	:= $(HOSTFS_ROOT)/bin/app_cow
+
 
 # USER_O_CPPS 		:= user/app_print_backtrace.c user/user_lib.c
 
@@ -137,6 +155,9 @@ $(OBJ_DIR):
 	@-mkdir -p $(dir $(USER_C_OBJS))
 	@-mkdir -p $(dir $(USER_O_OBJS))
 	@-mkdir -p $(dir $(USER_EXEC_OBJS))
+	@-mkdir -p $(dir $(USER_WAIT_OBJS))
+	@-mkdir -p $(dir $(USER_SEM_OBJS))
+	@-mkdir -p $(dir $(USER_COW_OBJS))
 	
 $(OBJ_DIR)/%.o : %.c
 	@echo "compiling" $<
@@ -204,15 +225,33 @@ $(USER_EXEC_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_EXEC_OBJS)
 	@$(COMPILE) --entry=main $(USER_EXEC_OBJS) $(UTIL_LIB) -o $@
 	@echo "User app has been built into" \"$@\"
 
+$(USER_WAIT_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_WAIT_OBJS)
+	@echo "linking" $@	...	
+	-@mkdir -p $(HOSTFS_ROOT)/bin
+	@$(COMPILE) --entry=main $(USER_WAIT_OBJS) $(UTIL_LIB) -o $@
+	@echo "User app has been built into" \"$@\"
+
+$(USER_SEM_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_SEM_OBJS)
+	@echo "linking" $@	...	
+	-@mkdir -p $(HOSTFS_ROOT)/bin
+	@$(COMPILE) --entry=main $(USER_SEM_OBJS) $(UTIL_LIB) -o $@
+	@echo "User app has been built into" \"$@\"
+
+$(USER_COW_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_COW_OBJS)
+	@echo "linking" $@	...	
+	-@mkdir -p $(HOSTFS_ROOT)/bin
+	@$(COMPILE) --entry=main $(USER_COW_OBJS) $(UTIL_LIB) -o $@
+	@echo "User app has been built into" \"$@\"
+
 -include $(wildcard $(OBJ_DIR)/*/*.d)
 -include $(wildcard $(OBJ_DIR)/*/*/*.d)
 
 .DEFAULT_GOAL := $(all)
 
-all: $(KERNEL_TARGET) $(USER_TARGET) $(USER_E_TARGET) $(USER_M_TARGET) $(USER_T_TARGET) $(USER_C_TARGET) $(USER_O_TARGET) $(USER_EXEC_TARGET)
+all: $(KERNEL_TARGET) $(USER_TARGET) $(USER_E_TARGET) $(USER_M_TARGET) $(USER_T_TARGET) $(USER_C_TARGET) $(USER_O_TARGET) $(USER_EXEC_TARGET) $(USER_WAIT_TARGET) $(USER_SEM_TARGET) $(USER_COW_TARGET)
 .PHONY:all
 
-run: $(KERNEL_TARGET) $(USER_TARGET) $(USER_E_TARGET) $(USER_M_TARGET) $(USER_T_TARGET) $(USER_C_TARGET) $(USER_O_TARGET) $(USER_EXEC_TARGET)
+run: $(KERNEL_TARGET) $(USER_TARGET) $(USER_E_TARGET) $(USER_M_TARGET) $(USER_T_TARGET) $(USER_C_TARGET) $(USER_O_TARGET) $(USER_EXEC_TARGET) $(USER_WAIT_TARGET) $(USER_SEM_TARGET) $(USER_COW_TARGET)
 	@echo "********************HUST PKE********************"
 	spike $(KERNEL_TARGET) /bin/app_shell
 

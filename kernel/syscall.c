@@ -33,6 +33,13 @@ ssize_t sys_user_print(const char *buf, size_t n)
   return 0;
 }
 
+ssize_t sys_user_printpa(uint64 va)
+{
+  uint64 pa = (uint64)user_va_to_pa((pagetable_t)(current->pagetable), (void *)va);
+  sprint("%lx\n", pa);
+  return 0;
+}
+
 //
 // implement the SYS_user_exit syscall
 //
@@ -299,6 +306,21 @@ ssize_t sys_user_exec(char *pathva, const char *argv)
   return do_exec(current, pathpa, argvpa);
 }
 
+uint64 sys_user_semNew(uint64 init_val)
+{
+  return do_semNew(init_val);
+};
+uint64 sys_user_semP(uint64 sid)
+{
+  do_semP(sid);
+  return 0;
+};
+uint64 sys_user_semV(uint64 sid)
+{
+  do_semV(sid);
+  return 0;
+};
+
 // ssize_t sys_user_print_backtrace(int depth)
 // {
 //   trapframe *tf = current->trapframe;
@@ -331,6 +353,8 @@ long do_syscall(long a0, long a1, long a2, long a3, long a4, long a5, long a6, l
   {
   case SYS_user_print:
     return sys_user_print((const char *)a1, a2);
+  case SYS_user_printpa:
+    return sys_user_printpa(a1);
   case SYS_user_exit:
     return sys_user_exit(a1);
   // added @lab2_2
@@ -375,6 +399,13 @@ long do_syscall(long a0, long a1, long a2, long a3, long a4, long a5, long a6, l
     return sys_user_exec((char *)a1, (char *)a2);
   case SYS_user_wait:
     return sys_user_wait(a1);
+
+  case SYS_user_semNew:
+    return sys_user_semNew(a1);
+  case SYS_user_semP:
+    return sys_user_semP(a1);
+  case SYS_user_semV:
+    return sys_user_semV(a1);
 
     // case SYS_user_print_backtrace:
     //   return sys_user_print_backtrace(a1);
