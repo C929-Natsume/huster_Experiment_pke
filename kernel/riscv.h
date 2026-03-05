@@ -231,4 +231,58 @@ static inline void flush_tlb(void) { asm volatile("sfence.vma zero, zero"); }
 typedef uint64 pte_t;
 typedef uint64 *pagetable_t; // 512 PTEs
 
+// ---------------------------------------------------------------------------
+// amoswap-based spinlock (RISC-V A extension)
+// ---------------------------------------------------------------------------
+
+static inline uint64 amoswap_d(volatile uint64 *ptr, uint64 value)
+{
+  uint64 result;
+  asm volatile("amoswap.d %0, %2, (%1)" : "=r"(result) : "r"(ptr), "r"(value) : "memory");
+  return result;
+}
+
+static inline uint64 amoswap_d_aq(volatile uint64 *ptr, uint64 value)
+{
+  uint64 result;
+  asm volatile("amoswap.d.aq %0, %2, (%1)" : "=r"(result) : "r"(ptr), "r"(value) : "memory");
+  return result;
+}
+
+static inline uint64 amoswap_d_rl(volatile uint64 *ptr, uint64 value)
+{
+  uint64 result;
+  asm volatile("amoswap.d.rl %0, %2, (%1)" : "=r"(result) : "r"(ptr), "r"(value) : "memory");
+  return result;
+}
+
+#define SPIN_LOCK_FREE 0
+#define SPIN_LOCK_HELD 1
+
+typedef struct
+{
+  volatile uint64 lock;
+} spinlock_amo_t;
+
+static inline void spinlock_amo_init(spinlock_amo_t *lk)
+{
+  lk->lock = SPIN_LOCK_FREE;
+}
+
+static inline void spinlock_amo_lock(spinlock_amo_t *lk)
+{
+  while (amoswap_d_aq(&lk->lock, SPIN_LOCK_HELD) != SPIN_LOCK_FREE)
+    ;
+}
+
+static inline void spinlock_amo_unlock(spinlock_amo_t *lk)
+{
+  amoswap_d_rl(&lk->lock, SPIN_LOCK_FREE);
+}
+
+static inline int spinlock_amo_trylock(spinlock_amo_t *lk)
+{
+  return amoswap_d_aq(&lk->lock, SPIN_LOCK_HELD) != SPIN_LOCK_FREE;
+}
+
 #endif

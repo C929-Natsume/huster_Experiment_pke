@@ -10,7 +10,7 @@
 #include "vmm.h"
 #include "sched.h"
 #include "util/functions.h"
-
+#include "memlayout.h"
 #include "spike_interface/spike_utils.h"
 #include "string.h"
 
@@ -41,17 +41,18 @@ static void handle_syscall(trapframe *tf)
 
 //
 // global variable that store the recorded "ticks". added @lab1_3
-static uint64 g_ticks = 0;
+static uint64 g_ticks[NCPU] = {};
 //
 // added @lab1_3
 //
 void handle_mtimer_trap()
 {
-  sprint("Ticks %d\n", g_ticks);
+  int tp = read_tp();
+  sprint("Ticks %d\n", g_ticks[tp]);
   // TODO (lab1_3): increase g_ticks to record this "tick", and then clear the "SIP"
   // field in sip register.
   // hint: use write_csr to disable the SIP_SSIP bit in sip.
-  g_ticks++;
+  g_ticks[tp]++;
   write_csr(sip, read_csr(sip) & ~SIP_SSIP);
 }
 
@@ -62,6 +63,7 @@ void handle_mtimer_trap()
 //
 void handle_user_page_fault(uint64 mcause, uint64 sepc, uint64 stval)
 {
+  int tp = read_tp();
   sprint("handle_page_fault: %lx\n", stval);
   switch (mcause)
   {
@@ -70,9 +72,20 @@ void handle_user_page_fault(uint64 mcause, uint64 sepc, uint64 stval)
     // dynamically increase application stack.
     // hint: first allocate a new physical page, and then, maps the new page to the
     // virtual address that causes the page fault.
-    void *pa = alloc_page();
-    uint64 va_page = stval & ~(PGSIZE - 1);
-    user_vm_map((pagetable_t)current->pagetable, va_page, PGSIZE, (uint64)pa, prot_to_type(PROT_WRITE | PROT_READ, 1));
+    if (stval > USER_STACK_TOP)
+    {
+      panic("invalid memory access at address 0x%lx\n", stval);
+    }
+    if (stval <= USER_STACK_TOP && stval > USER_STACK_TOP - current[tp]->size)
+    {
+      void *pa = alloc_page();
+      uint64 va_page = stval & ~(PGSIZE - 1);
+      user_vm_map((pagetable_t)current[tp]->pagetable, va_page, PGSIZE, (uint64)pa, prot_to_type(PROT_WRITE | PROT_READ, 1));
+    }
+    else if (stval <= USER_STACK_TOP - current[tp]->size && stval >= current[tp]->user_heap.heap_top)
+    {
+      panic("this address is not available!");
+    }
 
     break;
   default:
@@ -86,16 +99,17 @@ void handle_user_page_fault(uint64 mcause, uint64 sepc, uint64 stval)
 //
 void rrsched()
 {
+  int tp = read_tp();
   // TODO (lab3_3): implements round-robin scheduling.
   // hint: increase the tick_count member of current process by one, if it is bigger than
   // TIME_SLICE_LEN (means it has consumed its time slice), change its status into READY,
   // place it in the rear of ready queue, and finally schedule next process to run.
-  current->tick_count++;
-  if (current->tick_count >= TIME_SLICE_LEN)
+  current[tp]->tick_count++;
+  if (current[tp]->tick_count >= TIME_SLICE_LEN)
   {
-    current->tick_count = 0;
-    current->status = READY;
-    insert_to_ready_queue(current);
+    current[tp]->tick_count = 0;
+    current[tp]->status = READY;
+    insert_to_ready_queue(current[tp]);
     schedule();
   }
 }
@@ -106,14 +120,15 @@ void rrsched()
 //
 void smode_trap_handler(void)
 {
+  int tp = read_tp();
   // make sure we are in User mode before entering the trap handling.
   // we will consider other previous case in lab1_3 (interrupt).
   if ((read_csr(sstatus) & SSTATUS_SPP) != 0)
     panic("usertrap: not from user mode");
 
-  assert(current);
+  assert(current[tp]);
   // save user process counter.
-  current->trapframe->epc = read_csr(sepc);
+  current[tp]->trapframe->epc = read_csr(sepc);
 
   // if the cause of trap is syscall from user application.
   // read_csr() and CAUSE_USER_ECALL are macros defined in kernel/riscv.h
@@ -123,7 +138,7 @@ void smode_trap_handler(void)
   switch (cause)
   {
   case CAUSE_USER_ECALL:
-    handle_syscall(current->trapframe);
+    handle_syscall(current[tp]->trapframe);
     break;
   case CAUSE_MTIMER_S_TRAP:
     handle_mtimer_trap();
@@ -131,11 +146,11 @@ void smode_trap_handler(void)
     rrsched();
     break;
   case CAUSE_STORE_PAGE_FAULT:
-    uint64 va_page = read_csr(stval) & ~(PGSIZE - 1);
-    pte_t *pte = user_vm_get_pte((pagetable_t)current->pagetable, va_page);
+    uint64 fault_va = read_csr(stval);
+    uint64 va_page = fault_va & ~(PGSIZE - 1);
+    pte_t *pte = user_vm_get_pte((pagetable_t)current[tp]->pagetable, va_page);
     if (pte && (*pte & PTE_V) && (*pte & PTE_COW))
     {
-      // sprint("handle_page_fault: %lx\n", read_csr(stval));
       uint64 pa = PTE2PA(*pte);
       if (get_page_ref((void *)pa) > 1)
       {
@@ -152,9 +167,24 @@ void smode_trap_handler(void)
     }
     else
     {
-      void *pa = alloc_page();
-      user_vm_map((pagetable_t)current->pagetable, va_page, PGSIZE, (uint64)pa,
-                  prot_to_type(PROT_WRITE | PROT_READ, 1));
+      if (fault_va > USER_STACK_TOP)
+        panic("invalid memory access at address 0x%lx\n", fault_va);
+      if (fault_va <= USER_STACK_TOP && fault_va > USER_STACK_TOP - current[tp]->size)
+      {
+        void *pa = alloc_page();
+        user_vm_map((pagetable_t)current[tp]->pagetable, va_page, PGSIZE, (uint64)pa,
+                    prot_to_type(PROT_WRITE | PROT_READ, 1));
+      }
+      else if (fault_va <= USER_STACK_TOP - current[tp]->size && fault_va >= current[tp]->user_heap.heap_top)
+      {
+        panic("this address is not available!");
+      }
+      else
+      {
+        void *pa = alloc_page();
+        user_vm_map((pagetable_t)current[tp]->pagetable, va_page, PGSIZE, (uint64)pa,
+                    prot_to_type(PROT_WRITE | PROT_READ, 1));
+      }
     }
     break;
   case CAUSE_LOAD_PAGE_FAULT:
@@ -167,8 +197,30 @@ void smode_trap_handler(void)
     sprint("            sepc=%p stval=%p\n", read_csr(sepc), read_csr(stval));
     panic("unexpected exception happened.\n");
     break;
+  // default:
+  // {
+  //   uint64 sepc_val = read_csr(sepc);
+  //   uint64 stval_val = read_csr(stval);
+  //   sprint("smode_trap_handler(): unexpected scause %p\n", read_csr(scause));
+  //   sprint("            sepc=%p stval=%p\n", sepc_val, stval_val);
+  //   /* 取指 fault @ 0 排查：区分用户跳 0 与 trapframe 恢复错 */
+  //   if (cause == 0xc) {  /* CAUSE_FETCH_PAGE_FAULT */
+  //     sprint("[FETCH_PAGE_FAULT] hartid=%d pid=%d\n", tp, current[tp] ? (int)current[tp]->pid : -1);
+  //     if (current[tp]) {
+  //       sprint("            trapframe->epc (saved PC)=%p\n", (void *)current[tp]->trapframe->epc);
+  //       sprint("            trapframe->ra =%p a0=%p a1=%p\n",
+  //              (void *)current[tp]->trapframe->regs.ra,
+  //              (void *)current[tp]->trapframe->regs.a0,
+  //              (void *)current[tp]->trapframe->regs.a1);
+  //     }
+  //     if (sepc_val == 0 || stval_val == 0)
+  //       sprint("            => PC/fault_addr is 0: likely null call or wrong trapframe restore\n");
+  //   }
+  //   panic("unexpected exception happened.\n");
+  //   break;
+  // }
   }
 
   // continue (come back to) the execution of current process.
-  switch_to(current);
+  switch_to(current[tp]);
 }

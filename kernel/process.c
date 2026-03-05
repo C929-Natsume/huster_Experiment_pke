@@ -17,6 +17,7 @@
 #include "memlayout.h"
 #include "sched.h"
 #include "spike_interface/spike_utils.h"
+#include "util/functions.h"
 
 // Two functions defined in kernel/usertrap.S
 extern char smode_trap_vector[];
@@ -28,18 +29,20 @@ extern char trap_sec_start[];
 
 // process pool. added @lab3_1
 process procs[NPROC];
+static spinlock_amo_t proc_alloc_lock;
 semaphore sem_table[NSEM];
 
 // current points to the currently running user-mode application.
-process *current = NULL;
+process *current[NCPU] = {NULL};
 
 //
 // switch to a user-mode process
 //
 void switch_to(process *proc)
 {
+  int tp = read_tp();
   assert(proc);
-  current = proc;
+  current[tp] = proc;
 
   // write the smode_trap_vector (64-bit func. address) defined in kernel/strap_vector.S
   // to the stvec privilege register, such that trap handler pointed by smode_trap_vector
@@ -51,6 +54,7 @@ void switch_to(process *proc)
   proc->trapframe->kernel_sp = proc->kstack;     // process's kernel stack
   proc->trapframe->kernel_satp = read_csr(satp); // kernel page table
   proc->trapframe->kernel_trap = (uint64)smode_trap_handler;
+  proc->trapframe->regs.tp = read_tp();
 
   // SSTATUS_SPP and SSTATUS_SPIE are defined in kernel/riscv.h
   // set S Previous Privilege mode (the SSTATUS_SPP bit in sstatus register) to User mode.
@@ -67,9 +71,257 @@ void switch_to(process *proc)
   // make user page table. macro MAKE_SATP is defined in kernel/riscv.h. added @lab2_1
   uint64 user_satp = MAKE_SATP(proc->pagetable);
 
+  // if (proc->trapframe->epc == 0 && proc->trapframe->regs.ra == 0) {
+  //   sprint("switch_to: WARN pid=%d trapframe looks zeroed (epc=0 ra=0), ptr=%p\n",
+  //          (int)proc->pid, (void *)proc->trapframe);
+  // }
   // return_to_user() is defined in kernel/strap_vector.S. switch to user mode with sret.
   // note, return_to_user takes two parameters @ and after lab2_1.
   return_to_user(proc->trapframe, user_satp);
+}
+
+uint64 user_better_malloc(size_t size)
+{
+  int tp = read_tp();
+  if (current[tp] == NULL || size == 0)
+    return 0;
+
+  pagetable_t pt = (pagetable_t)(current[tp]->pagetable);
+
+  // 从 malloc_free_list 中复用可满足大小的已释放块
+  for (malloc *reuse = current[tp]->malloc_free_list; reuse != NULL; reuse = reuse->next)
+  {
+    if (reuse->size >= size)
+    {
+      uint64 va = reuse->va;
+
+      // 从 malloc_free_list 摘除 reuse
+      if (reuse->prev)
+        reuse->prev->next = reuse->next;
+      else
+        current[tp]->malloc_free_list = reuse->next;
+      if (reuse->next)
+        reuse->next->prev = reuse->prev;
+      reuse->prev = reuse->next = NULL;
+
+      // 确保 [va, va+size) 已映射
+      for (uint64 page_va = ROUNDDOWN(va, PGSIZE); page_va < va + size; page_va += PGSIZE)
+      {
+        if (lookup_pa(pt, page_va) == 0)
+        {
+          void *pa = alloc_page();
+          if (pa == NULL)
+          {
+            // reuse 插回 malloc_free_list
+            reuse->next = current[tp]->malloc_free_list;
+            if (current[tp]->malloc_free_list)
+              current[tp]->malloc_free_list->prev = reuse;
+            current[tp]->malloc_free_list = reuse;
+            return 0;
+          }
+          user_vm_map(pt, page_va, PGSIZE, (uint64)pa,
+                      prot_to_type(PROT_READ | PROT_WRITE, 1));
+        }
+      }
+
+      if (reuse->size > size)
+      {
+        // 剩余 [va+size, va+reuse->size) 挂回 malloc_free_list
+        malloc *rem;
+        if (current[tp]->malloc_free_list != NULL)
+        {
+          rem = current[tp]->malloc_free_list;
+          current[tp]->malloc_free_list = rem->next;
+          if (rem->next)
+            rem->next->prev = NULL;
+        }
+        else
+        {
+          rem = (malloc *)alloc_page();
+          if (rem == NULL)
+          {
+            reuse->next = current[tp]->malloc_free_list;
+            if (current[tp]->malloc_free_list)
+              current[tp]->malloc_free_list->prev = reuse;
+            current[tp]->malloc_free_list = reuse;
+            return 0;
+          }
+        }
+        rem->va = va + size;
+        rem->size = reuse->size - size;
+        rem->prev = NULL;
+        rem->next = current[tp]->malloc_free_list;
+        if (current[tp]->malloc_free_list)
+          current[tp]->malloc_free_list->prev = rem;
+        current[tp]->malloc_free_list = rem;
+      }
+
+      reuse->va = va;
+      reuse->size = size;
+      reuse->prev = NULL;
+      reuse->next = current[tp]->malloc_list;
+      if (current[tp]->malloc_list)
+        current[tp]->malloc_list->prev = reuse;
+      current[tp]->malloc_list = reuse;
+      return va;
+    }
+  }
+
+  // 未找到可复用的块
+  uint64 va = current[tp]->user_heap.heap_top;
+  uint64 page_start = ROUNDDOWN(va, PGSIZE);
+  uint64 remaining;
+
+  // 优先从 malloc_free_list 复用空闲节点，否则再 alloc_page
+  malloc *node;
+  int node_from_free_list = 0;
+  if (current[tp]->malloc_free_list != NULL)
+  {
+    node = current[tp]->malloc_free_list;
+    current[tp]->malloc_free_list = node->next;
+    if (node->next)
+      node->next->prev = NULL;
+    node->next = node->prev = NULL;
+    node_from_free_list = 1;
+  }
+  else
+  {
+    node = (malloc *)alloc_page();
+    if (node == NULL)
+      return 0;
+  }
+
+  int first_page_we_mapped = 0;
+  if (lookup_pa(pt, page_start) == 0)
+  {
+    first_page_we_mapped = 1;
+    void *pa = alloc_page();
+    if (pa == NULL)
+    {
+      if (node_from_free_list)
+      {
+        node->next = current[tp]->malloc_free_list;
+        if (current[tp]->malloc_free_list)
+          current[tp]->malloc_free_list->prev = node;
+        current[tp]->malloc_free_list = node;
+      }
+      else
+        free_page(node);
+      return 0;
+    }
+    user_vm_map(pt, page_start, PGSIZE, (uint64)pa,
+                prot_to_type(PROT_READ | PROT_WRITE, 1));
+  }
+
+  remaining = page_start + PGSIZE - va;
+
+  if (remaining >= size)
+  {
+    current[tp]->user_heap.heap_top = va + size;
+    node->va = va;
+    node->size = size;
+    node->prev = NULL;
+    node->next = current[tp]->malloc_list;
+    if (current[tp]->malloc_list)
+      current[tp]->malloc_list->prev = node;
+    current[tp]->malloc_list = node;
+    return va;
+  }
+
+  uint64 need = size - remaining;
+  uint64 n_pages = (need + PGSIZE - 1) / PGSIZE;
+  uint64 map_va = page_start + PGSIZE;
+
+  for (uint64 i = 0; i < n_pages; i++)
+  {
+    void *pa = alloc_page();
+    if (pa == NULL)
+    {
+      if (first_page_we_mapped)
+        user_vm_unmap(pt, page_start, PGSIZE, 1);
+      for (uint64 j = 0; j < i; j++)
+        user_vm_unmap(pt, map_va + j * PGSIZE, PGSIZE, 1);
+      if (node_from_free_list)
+      {
+        node->prev = NULL;
+        node->next = current[tp]->malloc_free_list;
+        if (current[tp]->malloc_free_list)
+          current[tp]->malloc_free_list->prev = node;
+        current[tp]->malloc_free_list = node;
+      }
+      else
+        free_page(node);
+      return 0;
+    }
+    user_vm_map(pt, map_va + i * PGSIZE, PGSIZE, (uint64)pa,
+                prot_to_type(PROT_READ | PROT_WRITE, 1));
+  }
+  current[tp]->user_heap.heap_top = va + size;
+
+  node->va = va;
+  node->size = size;
+  node->prev = NULL;
+  node->next = current[tp]->malloc_list;
+  if (current[tp]->malloc_list)
+    current[tp]->malloc_list->prev = node;
+  current[tp]->malloc_list = node;
+
+  return va;
+}
+
+// 检查页 [page_va, page_va+PGSIZE) 是否与 malloc_list 中某块相交
+static int page_has_other_allocation(uint64 page_va)
+{
+  int tp = read_tp();
+  for (malloc *m = current[tp]->malloc_list; m != NULL; m = m->next)
+  {
+    if (m->va + m->size > page_va && m->va < page_va + PGSIZE)
+      return 1;
+  }
+  return 0;
+}
+
+void user_better_free(uint64 va)
+{
+  int tp = read_tp();
+  if (current[tp] == NULL)
+    return;
+
+  malloc *cur = current[tp]->malloc_list;
+  while (cur != NULL)
+  {
+    if (cur->va == va)
+      break;
+    cur = cur->next;
+  }
+  if (cur == NULL)
+    return;
+
+  size_t size = cur->size;
+  pagetable_t pt = (pagetable_t)(current[tp]->pagetable);
+
+  // 从 malloc_list 摘除加入 malloc_free_list
+  if (cur->prev)
+    cur->prev->next = cur->next;
+  else
+    current[tp]->malloc_list = cur->next;
+  if (cur->next)
+    cur->next->prev = cur->prev;
+
+  cur->prev = NULL;
+  cur->next = current[tp]->malloc_free_list;
+  if (current[tp]->malloc_free_list)
+    current[tp]->malloc_free_list->prev = cur;
+  current[tp]->malloc_free_list = cur;
+
+  // 仅当该物理页上全部被释放后才 unmap 并释放物理页
+  for (uint64 page_va = ROUNDDOWN(va, PGSIZE);
+       page_va < va + size;
+       page_va += PGSIZE)
+  {
+    if (!page_has_other_allocation(page_va))
+      user_vm_unmap(pt, page_va, PGSIZE, 1);
+  }
 }
 
 //
@@ -91,6 +343,7 @@ void init_proc_pool()
     sem_table[i].value = 0;
     sem_table[i].wait_queue = NULL;
   }
+  spinlock_amo_init(&proc_alloc_lock);
 }
 
 //
@@ -102,23 +355,41 @@ process *alloc_process()
   // locate the first usable process structure
   int i;
 
+  spinlock_amo_lock(&proc_alloc_lock);
+
   for (i = 0; i < NPROC; i++)
     if (procs[i].status == FREE)
       break;
 
   if (i >= NPROC)
   {
+    spinlock_amo_unlock(&proc_alloc_lock);
     panic("cannot find any free process structure.\n");
     return 0;
   }
-
+  procs[i].status = READY;
   // init proc[i]'s vm space
   procs[i].trapframe = (trapframe *)alloc_page(); // trapframe, used to save context
   memset(procs[i].trapframe, 0, sizeof(trapframe));
+  procs[i].trapframe->regs.tp = read_tp();
 
   // page directory
   procs[i].pagetable = (pagetable_t)alloc_page();
+  // {
+  //   static uint64 trapframe_pages[NPROC];
+  //   for (int k = 0; k < NPROC; k++) {
+  //     if (trapframe_pages[k] == (uint64)procs[i].trapframe) {
+  //       sprint("alloc_proc: pid=%d trapframe=%p ALREADY USED BY pid=%d\n",
+  //              i, (void *)procs[i].trapframe, k);
+  //       break;
+  //     }
+  //   }
+  //   trapframe_pages[i] = (uint64)procs[i].trapframe;
+  // }
+  memset(procs[i].trapframe, 0, sizeof(trapframe));
+  procs[i].trapframe->regs.tp = read_tp();
   memset((void *)procs[i].pagetable, 0, PGSIZE);
+  // sprint("in alloc_proc. pid=%d, pagetable=%p\n", i, (pagetable_t)procs[i].pagetable);
 
   procs[i].kstack = (uint64)alloc_page() + PGSIZE; // user kernel stack top
   uint64 user_stack = (uint64)alloc_page();        // phisical address of user stack bottom
@@ -131,6 +402,8 @@ process *alloc_process()
   // map user stack in userspace
   user_vm_map((pagetable_t)procs[i].pagetable, USER_STACK_TOP - PGSIZE, PGSIZE,
               user_stack, prot_to_type(PROT_WRITE | PROT_READ, 1));
+  sprint("alloc_proc pid=%d: stack VA 0x%lx -> PA 0x%lx\n",
+         procs[i].pid, (uint64)(USER_STACK_TOP - PGSIZE), (uint64)user_stack);
   procs[i].mapped_info[STACK_SEGMENT].va = USER_STACK_TOP - PGSIZE;
   procs[i].mapped_info[STACK_SEGMENT].npages = 1;
   procs[i].mapped_info[STACK_SEGMENT].seg_type = STACK_SEGMENT;
@@ -153,6 +426,16 @@ process *alloc_process()
   sprint("in alloc_proc. user frame 0x%lx, user stack 0x%lx, user kstack 0x%lx \n",
          procs[i].trapframe, procs[i].trapframe->regs.sp, procs[i].kstack);
 
+  // sprint("in alloc_proc. user frame 0x%lx, user stack 0x%lx, user kstack 0x%lx \n",
+  //        procs[i].trapframe, procs[i].trapframe->regs.sp, procs[i].kstack);
+  // sprint("alloc_proc pid=%d: trapframe_pa=0x%lx pagetable_pa=0x%lx kstack_pa=0x%lx user_stack_pa=0x%lx mapped_info_pa=0x%lx\n",
+  //        procs[i].pid,
+  //        (uint64)procs[i].trapframe,
+  //        (uint64)procs[i].pagetable,
+  //        (uint64)(procs[i].kstack - PGSIZE),
+  //        (uint64)user_stack,
+  //        (uint64)procs[i].mapped_info);
+
   // initialize the process's heap manager
   procs[i].user_heap.heap_top = USER_FREE_ADDRESS_START;
   procs[i].user_heap.heap_bottom = USER_FREE_ADDRESS_START;
@@ -169,6 +452,7 @@ process *alloc_process()
   procs[i].pfiles = init_proc_file_management();
   sprint("in alloc_proc. build proc_file_management successfully.\n");
 
+  spinlock_amo_unlock(&proc_alloc_lock);
   // return after initialization.
   return &procs[i];
 }
@@ -196,6 +480,7 @@ int free_process(process *proc)
 //
 int do_fork(process *parent)
 {
+  int tp = read_tp();
   sprint("will fork a child from parent %d.\n", parent->pid);
   process *child = alloc_process();
 
@@ -227,8 +512,8 @@ int do_fork(process *parent)
       }
 
       // copy and map the heap blocks
-      for (uint64 heap_block = current->user_heap.heap_bottom;
-           heap_block < current->user_heap.heap_top; heap_block += PGSIZE)
+      for (uint64 heap_block = current[tp]->user_heap.heap_bottom;
+           heap_block < current[tp]->user_heap.heap_top; heap_block += PGSIZE)
       {
         if (free_block_filter[(heap_block - heap_bottom) / PGSIZE]) // skip free blocks
           continue;
@@ -383,6 +668,7 @@ int do_semNew(uint64 init_val)
 
 void do_semP(uint64 sid)
 {
+  int tp = read_tp();
   if (sid >= (uint64)NSEM || sem_table[sid].ifuse == 0)
   {
     panic("do_semP: invalid sid\n");
@@ -395,19 +681,19 @@ void do_semP(uint64 sid)
     return;
   }
 
-  current->queue_next = NULL;
+  current[tp]->queue_next = NULL;
   if (sem->wait_queue == NULL)
   {
-    sem->wait_queue = current;
+    sem->wait_queue = current[tp];
   }
   else
   {
     process *p = sem->wait_queue;
     while (p->queue_next != NULL)
       p = p->queue_next;
-    p->queue_next = current;
+    p->queue_next = current[tp];
   }
-  current->status = BLOCKED;
+  current[tp]->status = BLOCKED;
   schedule();
 }
 

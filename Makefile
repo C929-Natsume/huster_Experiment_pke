@@ -130,6 +130,30 @@ USER_COW_OBJS  		:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_COW_CPPS)
 
 USER_COW_TARGET 	:= $(HOSTFS_ROOT)/bin/app_cow
 
+USER_SUM_CPPS 		:= user/app_sum_sequence.c user/user_lib.c
+
+USER_SUM_OBJS  		:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_SUM_CPPS)))
+
+USER_SUM_TARGET 	:= $(HOSTFS_ROOT)/bin/app_sum_sequence
+
+USER_BETTER_CPPS 		:= user/app_singlepageheap.c user/user_lib.c
+
+USER_BETTER_OBJS  		:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_BETTER_CPPS)))
+
+USER_BETTER_TARGET 	:= $(HOSTFS_ROOT)/bin/app_singlepageheap
+
+USER_ALA_CPPS 		:= user/app_alloc0.c user/user_lib.c
+
+USER_ALA_OBJS  		:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_ALA_CPPS)))
+
+USER_ALA_TARGET 	:= $(HOSTFS_ROOT)/bin/app_alloc0
+
+USER_ALB_CPPS 		:= user/app_alloc1.c user/user_lib.c
+
+USER_ALB_OBJS  		:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_ALB_CPPS)))
+
+USER_ALB_TARGET 	:= $(HOSTFS_ROOT)/bin/app_alloc1
+
 
 # USER_O_CPPS 		:= user/app_print_backtrace.c user/user_lib.c
 
@@ -158,6 +182,10 @@ $(OBJ_DIR):
 	@-mkdir -p $(dir $(USER_WAIT_OBJS))
 	@-mkdir -p $(dir $(USER_SEM_OBJS))
 	@-mkdir -p $(dir $(USER_COW_OBJS))
+	@-mkdir -p $(dir $(USER_SUM_OBJS))
+	@-mkdir -p $(dir $(USER_BETTER_OBJS))
+	@-mkdir -p $(dir $(USER_ALA_OBJS))
+	@-mkdir -p $(dir $(USER_ALB_OBJS))
 	
 $(OBJ_DIR)/%.o : %.c
 	@echo "compiling" $<
@@ -243,15 +271,39 @@ $(USER_COW_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_COW_OBJS)
 	@$(COMPILE) --entry=main $(USER_COW_OBJS) $(UTIL_LIB) -o $@
 	@echo "User app has been built into" \"$@\"
 
+$(USER_SUM_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_SUM_OBJS)
+	@echo "linking" $@	...	
+	-@mkdir -p $(HOSTFS_ROOT)/bin
+	@$(COMPILE) --entry=main $(USER_SUM_OBJS) $(UTIL_LIB) -o $@
+	@echo "User app has been built into" \"$@\"
+
+$(USER_BETTER_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_BETTER_OBJS)
+	@echo "linking" $@	...	
+	-@mkdir -p $(HOSTFS_ROOT)/bin
+	@$(COMPILE) --entry=main $(USER_BETTER_OBJS) $(UTIL_LIB) -o $@
+	@echo "User app has been built into" \"$@\"
+
+$(USER_ALA_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_ALA_OBJS)
+	@echo "linking" $@	...	
+	-@mkdir -p $(HOSTFS_ROOT)/bin
+	@$(COMPILE) --entry=main $(USER_ALA_OBJS) $(UTIL_LIB) -o $@
+	@echo "User app has been built into" \"$@\"
+
+$(USER_ALB_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_ALB_OBJS)
+	@echo "linking" $@	...	
+	-@mkdir -p $(HOSTFS_ROOT)/bin
+	@$(COMPILE) --entry=main $(USER_ALB_OBJS) $(UTIL_LIB) -o $@
+	@echo "User app has been built into" \"$@\"
+
 -include $(wildcard $(OBJ_DIR)/*/*.d)
 -include $(wildcard $(OBJ_DIR)/*/*/*.d)
 
 .DEFAULT_GOAL := $(all)
 
-all: $(KERNEL_TARGET) $(USER_TARGET) $(USER_E_TARGET) $(USER_M_TARGET) $(USER_T_TARGET) $(USER_C_TARGET) $(USER_O_TARGET) $(USER_EXEC_TARGET) $(USER_WAIT_TARGET) $(USER_SEM_TARGET) $(USER_COW_TARGET)
+all: $(KERNEL_TARGET) $(USER_TARGET) $(USER_E_TARGET) $(USER_M_TARGET) $(USER_T_TARGET) $(USER_C_TARGET) $(USER_O_TARGET) $(USER_EXEC_TARGET) $(USER_WAIT_TARGET) $(USER_SEM_TARGET) $(USER_COW_TARGET) $(USER_SUM_TARGET) $(USER_BETTER_TARGET) $(USER_ALA_TARGET) $(USER_ALB_TARGET)
 .PHONY:all
 
-run: $(KERNEL_TARGET) $(USER_TARGET) $(USER_E_TARGET) $(USER_M_TARGET) $(USER_T_TARGET) $(USER_C_TARGET) $(USER_O_TARGET) $(USER_EXEC_TARGET) $(USER_WAIT_TARGET) $(USER_SEM_TARGET) $(USER_COW_TARGET)
+run: $(KERNEL_TARGET) $(USER_TARGET) $(USER_E_TARGET) $(USER_M_TARGET) $(USER_T_TARGET) $(USER_C_TARGET) $(USER_O_TARGET) $(USER_EXEC_TARGET) $(USER_WAIT_TARGET) $(USER_SEM_TARGET) $(USER_COW_TARGET) $(USER_SUM_TARGET) $(USER_BETTER_TARGET) $(USER_ALA_TARGET) $(USER_ALB_TARGET)
 	@echo "********************HUST PKE********************"
 	spike $(KERNEL_TARGET) /bin/app_shell
 

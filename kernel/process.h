@@ -67,6 +67,14 @@ typedef struct process_heap_manager
   uint32 free_pages_count;
 } process_heap_manager;
 
+typedef struct malloc_t
+{
+  uint64 va;
+  size_t size;
+  struct malloc_t *next;
+  struct malloc_t *prev;
+} malloc;
+
 // the extremely simple definition of process, used for begining labs of PKE
 typedef struct process_t
 {
@@ -76,6 +84,12 @@ typedef struct process_t
   pagetable_t pagetable;
   // trapframe storing the context of a (User mode) process.
   trapframe *trapframe;
+
+  // add size
+  uint64 size;
+  // add malloc
+  malloc *malloc_list;
+  malloc *malloc_free_list;
 
   // points to a page that contains mapped_regions. below are added @lab3_1
   mapped_region *mapped_info;
@@ -112,6 +126,9 @@ typedef struct semaphore_t
 // switch to run user app
 void switch_to(process *);
 
+uint64 user_better_malloc(size_t size);
+void user_better_free(uint64 va);
+
 // initialize process pool (the procs[] array)
 void init_proc_pool();
 // allocate an empty process, init its vm space. returns its pid
@@ -128,7 +145,7 @@ void do_semP(uint64 sid);
 void do_semV(uint64 sid);
 
 // current running process
-extern process *current;
+extern process *current[NCPU];
 
 extern process procs[NPROC];
 

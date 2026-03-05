@@ -20,6 +20,8 @@ extern uint64 g_mem_size;
 static uint64 free_mem_start_addr; // beginning address of free memory
 static uint64 free_mem_end_addr;   // end address of free memory (not included)
 
+int vm_alloc_stage[NCPU] = {0};
+
 typedef struct node
 {
   struct node *next;
@@ -27,6 +29,7 @@ typedef struct node
 
 // g_free_mem_list is the head of the list of free physical memory pages
 static list_node g_free_mem_list;
+static spinlock_amo_t pmm_lock;
 
 //
 // actually creates the freepage list. each page occupies 4KB (PGSIZE), i.e., small page.
@@ -44,6 +47,7 @@ static void create_freepage_list(uint64 start, uint64 end)
 //
 void free_page(void *pa)
 {
+  spinlock_amo_lock(&pmm_lock);
   if (((uint64)pa % PGSIZE) != 0 || (uint64)pa < free_mem_start_addr || (uint64)pa >= free_mem_end_addr)
     panic("free_page 0x%lx \n", pa);
 
@@ -60,6 +64,7 @@ void free_page(void *pa)
     n->next = g_free_mem_list.next;
     g_free_mem_list.next = n;
   }
+  spinlock_amo_unlock(&pmm_lock);
 }
 
 //
@@ -68,7 +73,14 @@ void free_page(void *pa)
 //
 void *alloc_page(void)
 {
+  spinlock_amo_lock(&pmm_lock);
   list_node *n = g_free_mem_list.next;
+  int tp = read_tp();
+  uint64 hartid = tp;
+  if (vm_alloc_stage[hartid])
+  {
+    // sprint("hartid = %ld: alloc page 0x%x\n", hartid, n);
+  }
   if (n)
     g_free_mem_list.next = n->next;
   void *pa = (void *)n;
@@ -78,6 +90,7 @@ void *alloc_page(void)
     if (idx < (free_mem_end_addr - free_mem_start_addr) / PGSIZE)
       page_ref_count[idx] = 1;
   }
+  spinlock_amo_unlock(&pmm_lock);
   return pa;
 }
 
@@ -109,6 +122,7 @@ void pmm_init()
          free_mem_end_addr - 1);
 
   sprint("kernel memory manager is initializing ...\n");
+  spinlock_amo_init(&pmm_lock);
   // create the list of free pages
   create_freepage_list(free_mem_start_addr, free_mem_end_addr);
 }
@@ -117,10 +131,12 @@ void inc_page_ref(void *pa)
 {
   if ((uint64)pa < free_mem_start_addr || (uint64)pa >= free_mem_end_addr)
     return;
+  spinlock_amo_lock(&pmm_lock);
   uint64 idx = ((uint64)pa - free_mem_start_addr) / PGSIZE;
   uint64 max_pages = (free_mem_end_addr - free_mem_start_addr) / PGSIZE;
   if (idx < max_pages)
     page_ref_count[idx]++;
+  spinlock_amo_unlock(&pmm_lock);
 }
 
 void dec_page_ref(void *pa)
@@ -132,7 +148,10 @@ int get_page_ref(void *pa)
 {
   if ((uint64)pa < free_mem_start_addr || (uint64)pa >= free_mem_end_addr)
     return 0;
+  spinlock_amo_lock(&pmm_lock);
   uint64 idx = ((uint64)pa - free_mem_start_addr) / PGSIZE;
   uint64 max_pages = (free_mem_end_addr - free_mem_start_addr) / PGSIZE;
-  return (idx < max_pages) ? page_ref_count[idx] : 0;
+  int ref = (idx < max_pages) ? page_ref_count[idx] : 0;
+  spinlock_amo_unlock(&pmm_lock);
+  return ref;
 }

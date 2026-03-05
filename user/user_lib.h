@@ -12,6 +12,9 @@ void printpa(int *va);
 int exit(int code);
 void *naive_malloc();
 void naive_free(void *va);
+void *better_malloc(int n);
+void better_free(void *va);
+
 int fork();
 void yield();
 

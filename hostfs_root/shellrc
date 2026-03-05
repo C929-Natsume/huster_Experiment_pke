@@ -9,4 +9,6 @@
 /bin/app_wait NULL
 /bin/app_semaphore NULL
 /bin/app_cow NULL
+/bin/app_singlepageheap NULL
+/bin/app_sum_sequence NULL
 END END
