@@ -363,27 +363,53 @@ uint64 sys_user_semV(uint64 sid)
   return 0;
 };
 
-// ssize_t sys_user_print_backtrace(int depth)
-// {
-//   trapframe *tf = current->trapframe;
-//   uint64 *frame_pointer = (uint64 *)tf->regs.s0;
-//   frame_pointer = (uint64 *)*(frame_pointer - 1);
+ssize_t sys_user_print_backtrace(int depth)
+{
+  int tp = read_tp();
+  trapframe *tf = current[tp]->trapframe;
+  pagetable_t pagetable = (pagetable_t)current[tp]->pagetable;
+  uint64 user_fp = tf->regs.s0;
+  // sprint("S0%lx----------------\n", user_fp);
 
-//   for (int i = 0; i < depth; i++)
-//   {
-//     if (frame_pointer == 0)
-//     {
-//       break;
-//     }
-//     uint64 return_address = *(frame_pointer - 1);
-//     char *name = find_func_name(return_address);
-//     sprint("%s\n", name);
-//     if (strcmp(name, "main") == 0)
-//       break;
-//     frame_pointer = (uint64 *)*(frame_pointer - 2);
-//   }
-//   return 0;
-// }
+  if (user_fp == 0)
+    return 0;
+
+  void *pa = user_va_to_pa(pagetable, (void *)(user_fp - 8));
+  // sprint("Pa%lx----------------\n", pa);
+  if (!pa)
+    return 0;
+  uint64 user_fp_next = *(uint64 *)pa;
+
+  for (int i = 0; i < depth; i++)
+  {
+    // sprint("User%lx----------------\n", user_fp_next);
+    if (user_fp_next == 0)
+      break;
+    // sprint("?????????????\n");
+    /* 从 (frame - 8) 读返回地址 */
+    pa = user_va_to_pa(pagetable, (void *)(user_fp_next - 8));
+    // sprint("?????????????\n");
+
+    if (!pa)
+      break;
+    uint64 return_address = *(uint64 *)pa;
+    // sprint("?????????????\n");
+
+    char *name = find_func_name("bin/app_print_backtrace", return_address);
+    // sprint("%lx\n", name);
+
+    sprint("%s\n", name);
+
+    if (strcmp(name, "main") == 0)
+      break;
+
+    pa = user_va_to_pa(pagetable, (void *)(user_fp_next - 16));
+    if (!pa)
+      break;
+    user_fp_next = *(uint64 *)pa;
+  }
+  return 0;
+}
 
 //
 // [a0]: the syscall number; [a1] ... [a7]: arguments to the syscalls.
@@ -453,8 +479,8 @@ long do_syscall(long a0, long a1, long a2, long a3, long a4, long a5, long a6, l
   case SYS_user_semV:
     return sys_user_semV(a1);
 
-    // case SYS_user_print_backtrace:
-    //   return sys_user_print_backtrace(a1);
+  case SYS_user_print_backtrace:
+    return sys_user_print_backtrace(a1);
 
   default:
     panic("Unknown syscall %ld \n", a0);

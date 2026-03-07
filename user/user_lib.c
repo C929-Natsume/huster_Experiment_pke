@@ -232,7 +232,7 @@ void sem_V(int sid)
   do_user_call(SYS_user_semV, sid, 0, 0, 0, 0, 0, 0);
 }
 
-// int print_backtrace(int depth)
-// {
-//   return do_user_call(SYS_user_print_backtrace, depth, 0, 0, 0, 0, 0, 0);
-// }
+int print_backtrace(int depth)
+{
+  return do_user_call(SYS_user_print_backtrace, depth, 0, 0, 0, 0, 0, 0);
+}

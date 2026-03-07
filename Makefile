@@ -21,7 +21,11 @@ ifneq (,)
   mabi := -mabi=$(if $(is_32bit),ilp32,lp64)
 endif
 
-CFLAGS        := -Wall -Werror  -fno-builtin -nostdlib -D__NO_INLINE__ -mcmodel=medany -g -Og -std=gnu99 -Wno-unused -Wno-attributes -fno-delete-null-pointer-checks -fno-PIE $(march)
+# 核数：与 spike -p 一致，默认 2；单核用 make run P=1
+P ?= 2
+CFLAGS        := -Wall -Werror -gdwarf-3 -fno-builtin -nostdlib -D__NO_INLINE__ -mcmodel=medany -g -Og -std=gnu99 -Wno-unused -Wno-attributes -fno-delete-null-pointer-checks -fno-PIE -DNCPU=$(P) $(march) -fno-omit-frame-pointer
+
+# CFLAGS        := -Wall -Werror  -fno-builtin -nostdlib -D__NO_INLINE__ -mcmodel=medany -g -Og -std=gnu99 -Wno-unused -Wno-attributes -fno-delete-null-pointer-checks -fno-PIE $(march)
 COMPILE       	:= $(CC) -MMD -MP $(CFLAGS) $(SPROJS_INCLUDE)
 
 #---------------------	utils -----------------------
@@ -50,6 +54,12 @@ KERNEL_ASMS  	:= $(wildcard $(KERNEL_ASMS))
 KERNEL_OBJS  	:=  $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(KERNEL_CPPS)))
 KERNEL_OBJS  	+=  $(addprefix $(OBJ_DIR)/, $(patsubst %.S,%.o,$(KERNEL_ASMS)))
 
+# P 改变时重编内核（使 NCPU 生效）
+.current_p: FORCE
+	@v=$(P); [ -f $@ ] && [ "$$(cat $@ 2>/dev/null)" = "$$v" ] || echo "$$v" > $@
+FORCE: ;
+$(KERNEL_OBJS): .current_p
+
 KERNEL_TARGET = $(OBJ_DIR)/riscv-pke
 
 
@@ -64,6 +74,9 @@ SPIKE_INF_LIB   := $(OBJ_DIR)/spike_interface.a
 
 
 #---------------------	user   -----------------------
+USER_LDS0  := user/user0.lds
+USER_LDS1  := user/user1.lds
+
 # USER_CPPS 		:= user/start.c user/user_lib.c
 
 # USER_OBJS  		:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_CPPS)))
@@ -154,18 +167,26 @@ USER_ALB_OBJS  		:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_ALB_CPPS)
 
 USER_ALB_TARGET 	:= $(HOSTFS_ROOT)/bin/app_alloc1
 
+USER_TRACE_CPPS 		:= user/app_print_backtrace.c user/user_lib.c
 
-# USER_O_CPPS 		:= user/app_print_backtrace.c user/user_lib.c
+USER_TRACE_OBJS  		:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_TRACE_CPPS)))
 
-# USER_O_OBJS  		:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_O_CPPS)))
+USER_TRACE_TARGET 	:= $(HOSTFS_ROOT)/bin/app_print_backtrace
 
-# USER_O_TARGET 	:= $(HOSTFS_ROOT)/bin/app_print_backtrace
+USER_ERROR_CPPS 		:= user/app_errorline.c user/user_lib.c
 
-# USER_O_CPPS 		:= user/app_errorline.c user/user_lib.c
+USER_ERROR_OBJS  		:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_ERROR_CPPS)))
 
-# USER_O_OBJS  		:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_O_CPPS)))
+USER_ERROR_TARGET 	:= $(HOSTFS_ROOT)/bin/app_errorline
 
-# USER_O_TARGET 	:= $(HOSTFS_ROOT)/bin/app_errorline
+USER_CPP0 		:= user/app0.c user/user_lib.c
+USER_CPP1 		:= user/app1.c user/user_lib.c
+
+USER_OBJ0  		:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_CPP0)))
+USER_OBJ1  		:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_CPP1)))
+
+USER_TARGET0 	:=  $(HOSTFS_ROOT)/bin/app0
+USER_TARGET1 	:=  $(HOSTFS_ROOT)/bin/app1
 #------------------------targets------------------------
 $(OBJ_DIR):
 	@-mkdir -p $(OBJ_DIR)	
@@ -186,6 +207,10 @@ $(OBJ_DIR):
 	@-mkdir -p $(dir $(USER_BETTER_OBJS))
 	@-mkdir -p $(dir $(USER_ALA_OBJS))
 	@-mkdir -p $(dir $(USER_ALB_OBJS))
+	@-mkdir -p $(dir $(USER_TRACE_OBJS))
+	@-mkdir -p $(dir $(USER_ERROR_OBJS))
+	@-mkdir -p $(dir $(USER_OBJ0))
+	@-mkdir -p $(dir $(USER_OBJ1))
 	
 $(OBJ_DIR)/%.o : %.c
 	@echo "compiling" $<
@@ -295,17 +320,40 @@ $(USER_ALB_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_ALB_OBJS)
 	@$(COMPILE) --entry=main $(USER_ALB_OBJS) $(UTIL_LIB) -o $@
 	@echo "User app has been built into" \"$@\"
 
+$(USER_TRACE_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_TRACE_OBJS)
+	@echo "linking" $@	...	
+	-@mkdir -p $(HOSTFS_ROOT)/bin
+	@$(COMPILE) --entry=main $(USER_TRACE_OBJS) $(UTIL_LIB) -o $@
+	@echo "User app has been built into" \"$@\"
+
+$(USER_ERROR_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_ERROR_OBJS)
+	@echo "linking" $@	...	
+	-@mkdir -p $(HOSTFS_ROOT)/bin
+	@$(COMPILE) --entry=main $(USER_ERROR_OBJS) $(UTIL_LIB) -o $@
+	@echo "User app has been built into" \"$@\"
+
+$(USER_TARGET0): $(OBJ_DIR) $(UTIL_LIB) $(USER_OBJ0) $(USER_LDS0)
+	@echo "linking" $@	...	
+	@$(COMPILE) $(USER_OBJ0) $(UTIL_LIB) -o $@ -T $(USER_LDS0)
+	@echo "User app has been built into" \"$@\"
+	
+$(USER_TARGET1): $(OBJ_DIR) $(UTIL_LIB) $(USER_OBJ1) $(USER_LDS1)
+	@echo "linking" $@	...	
+	@$(COMPILE) $(USER_OBJ1) $(UTIL_LIB) -o $@ -T $(USER_LDS1)
+	@echo "User app has been built into" \"$@\"
+
 -include $(wildcard $(OBJ_DIR)/*/*.d)
 -include $(wildcard $(OBJ_DIR)/*/*/*.d)
 
 .DEFAULT_GOAL := $(all)
 
-all: $(KERNEL_TARGET) $(USER_TARGET) $(USER_E_TARGET) $(USER_M_TARGET) $(USER_T_TARGET) $(USER_C_TARGET) $(USER_O_TARGET) $(USER_EXEC_TARGET) $(USER_WAIT_TARGET) $(USER_SEM_TARGET) $(USER_COW_TARGET) $(USER_SUM_TARGET) $(USER_BETTER_TARGET) $(USER_ALA_TARGET) $(USER_ALB_TARGET)
+all: $(KERNEL_TARGET) $(USER_TARGET) $(USER_E_TARGET) $(USER_M_TARGET) $(USER_T_TARGET) $(USER_C_TARGET) $(USER_O_TARGET) $(USER_EXEC_TARGET) $(USER_WAIT_TARGET) $(USER_SEM_TARGET) $(USER_COW_TARGET) $(USER_SUM_TARGET) $(USER_BETTER_TARGET) $(USER_ALA_TARGET) $(USER_ALB_TARGET) $(USER_TRACE_TARGET) $(USER_ERROR_TARGET) $(USER_TARGET0) $(USER_TARGET1)
 .PHONY:all
 
-run: $(KERNEL_TARGET) $(USER_TARGET) $(USER_E_TARGET) $(USER_M_TARGET) $(USER_T_TARGET) $(USER_C_TARGET) $(USER_O_TARGET) $(USER_EXEC_TARGET) $(USER_WAIT_TARGET) $(USER_SEM_TARGET) $(USER_COW_TARGET) $(USER_SUM_TARGET) $(USER_BETTER_TARGET) $(USER_ALA_TARGET) $(USER_ALB_TARGET)
+# run: $(KERNEL_TARGET) $(USER_TARGET) $(USER_E_TARGET) $(USER_M_TARGET) $(USER_T_TARGET) $(USER_C_TARGET) $(USER_O_TARGET) $(USER_EXEC_TARGET) $(USER_WAIT_TARGET) $(USER_SEM_TARGET) $(USER_COW_TARGET) $(USER_SUM_TARGET) $(USER_BETTER_TARGET) $(USER_ALA_TARGET) $(USER_ALB_TARGET) $(USER_TRACE_TARGET)
+run: $(KERNEL_TARGET) $(USER_TARGET) $(USER_E_TARGET) $(USER_M_TARGET) $(USER_T_TARGET) $(USER_C_TARGET) $(USER_O_TARGET) $(USER_EXEC_TARGET) $(USER_WAIT_TARGET) $(USER_SEM_TARGET) $(USER_COW_TARGET) $(USER_SUM_TARGET) $(USER_BETTER_TARGET) $(USER_ALA_TARGET) $(USER_ALB_TARGET) $(USER_TRACE_TARGET) $(USER_ERROR_TARGET) $(USER_TARGET0) $(USER_TARGET1)
 	@echo "********************HUST PKE********************"
-	spike $(KERNEL_TARGET) /bin/app_shell
+	spike -p$(P) $(KERNEL_TARGET) /bin/app_shell
 
 # need openocd!
 gdb:$(KERNEL_TARGET) $(USER_TARGET)

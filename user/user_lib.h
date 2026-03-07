@@ -44,6 +44,6 @@ int sem_new(int init_val);
 void sem_P(int sid);
 void sem_V(int sid);
 
-// int print_backtrace(int depth);
+int print_backtrace(int depth);
 
 #endif
