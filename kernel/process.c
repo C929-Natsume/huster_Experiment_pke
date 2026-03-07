@@ -355,7 +355,7 @@ process *alloc_process()
   // locate the first usable process structure
   int i;
 
-  spinlock_amo_lock(&proc_alloc_lock);
+  // spinlock_amo_lock(&proc_alloc_lock);
 
   for (i = 0; i < NPROC; i++)
     if (procs[i].status == FREE)
@@ -363,7 +363,7 @@ process *alloc_process()
 
   if (i >= NPROC)
   {
-    spinlock_amo_unlock(&proc_alloc_lock);
+    // spinlock_amo_unlock(&proc_alloc_lock);
     panic("cannot find any free process structure.\n");
     return 0;
   }
@@ -452,7 +452,7 @@ process *alloc_process()
   procs[i].pfiles = init_proc_file_management();
   sprint("in alloc_proc. build proc_file_management successfully.\n");
 
-  spinlock_amo_unlock(&proc_alloc_lock);
+  // spinlock_amo_unlock(&proc_alloc_lock);
   // return after initialization.
   return &procs[i];
 }

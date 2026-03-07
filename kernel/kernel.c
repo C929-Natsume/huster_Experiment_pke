@@ -129,7 +129,14 @@ int s_start(void)
   sprint("Switch to user mode...\n");
   // the application code (elf) is first loaded into memory, and then put into execution
   // added @lab3_1
-  insert_to_ready_queue(load_user_program());
+  arg_buf arg_bug_msg;
+  size_t argc = parse_args(&arg_bug_msg);
+  process *pr = load_user_program();
+  if (!argc)
+    panic("You need to specify the application program!\n");
+  if (tp < argc)
+    insert_to_ready_queue(pr);
+  // insert_to_ready_queue(load_user_program());
   schedule();
 
   // we should never reach here.

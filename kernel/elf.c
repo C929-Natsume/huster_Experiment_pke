@@ -383,7 +383,7 @@ void load_bincode_from_host_elf(process *p, char *filename)
   // close the vfs file
   vfs_close(info.f);
 
-  // sprint("Application program entry point (virtual address): 0x%lx\n", p->trapframe->epc);
+  sprint("Application program entry point (virtual address): 0x%lx\n", p->trapframe->epc);
 }
 
 // load
