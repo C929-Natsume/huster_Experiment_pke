@@ -33,8 +33,8 @@ static void *elf_alloc_mb(elf_ctx *ctx, uint64 elf_pa, uint64 elf_va, uint64 siz
   // sprint("elf_alloc_mb: msg->p->pid=%d\n", msg->p->pid);
   user_vm_map((pagetable_t)msg->p->pagetable, elf_va, PGSIZE, (uint64)pa,
               prot_to_type(PROT_WRITE | PROT_READ | PROT_EXEC, 1));
-  sprint("elf_alloc_mb: tp=%d pid=%d elf_va=%p, pa=%p\n", read_tp(), msg->p->pid, elf_va, pa);
-  sprint("elf_alloc_mb: user_vm_map done\n");
+  // sprint("elf_alloc_mb: tp=%d pid=%d elf_va=%p, pa=%p\n", read_tp(), msg->p->pid, elf_va, pa);
+  // sprint("elf_alloc_mb: user_vm_map done\n");
   return pa;
 }
 
@@ -330,12 +330,12 @@ elf_status elf_load(elf_ctx *ctx)
     if (ph_addr.flags == (SEGMENT_READABLE | SEGMENT_EXECUTABLE))
     {
       ((process *)(((elf_info *)(ctx->info))->p))->mapped_info[j].seg_type = CODE_SEGMENT;
-      sprint("CODE_SEGMENT added at mapped info offset:%d\n", j);
+      // sprint("CODE_SEGMENT added at mapped info offset:%d\n", j);
     }
     else if (ph_addr.flags == (SEGMENT_READABLE | SEGMENT_WRITABLE))
     {
       ((process *)(((elf_info *)(ctx->info))->p))->mapped_info[j].seg_type = DATA_SEGMENT;
-      sprint("DATA_SEGMENT added at mapped info offset:%d\n", j);
+      // sprint("DATA_SEGMENT added at mapped info offset:%d\n", j);
     }
     else
       panic("unknown program segment encountered, segment flag:%d.\n", ph_addr.flags);

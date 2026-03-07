@@ -11,6 +11,7 @@
 /bin/app_cow NULL
 /bin/app_singlepageheap NULL
 /bin/app_print_backtrace NULL
+/bin/app_relativepath NULL
 /bin/app_errorline NULL
 /bin/app_sum_sequence NULL
 END END

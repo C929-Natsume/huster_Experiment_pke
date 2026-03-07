@@ -43,6 +43,10 @@
 #define SYS_user_better_free_page (SYS_user_base + 37)
 
 #define SYS_user_print_backtrace (SYS_user_base + 38)
+#define SYS_user_scanf (SYS_user_base + 39)
+// added lab4_c1
+#define SYS_user_rcwd (SYS_user_base + 40)
+#define SYS_user_ccwd (SYS_user_base + 41)
 
 long do_syscall(long a0, long a1, long a2, long a3, long a4, long a5, long a6, long a7);
 

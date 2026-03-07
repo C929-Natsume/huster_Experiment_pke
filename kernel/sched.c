@@ -16,7 +16,7 @@ volatile int procounter = 0;
 void insert_to_ready_queue(process *proc)
 {
   int tp = read_tp();
-  sprint("going to insert process %d to ready queue.\n", proc->pid);
+  // sprint("going to insert process %d to ready queue.\n", proc->pid);
   // if the queue is empty in the beginning
   if (ready_queue_head[tp] == NULL)
   {

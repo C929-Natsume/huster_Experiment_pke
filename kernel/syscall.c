@@ -15,6 +15,8 @@
 #include "sched.h"
 #include "proc_file.h"
 
+#include "vfs.h"
+
 #include "spike_interface/spike_utils.h"
 
 #include "process.h"
@@ -32,6 +34,17 @@ ssize_t sys_user_print(const char *buf, size_t n)
   assert(current[tp]);
   char *pa = (char *)user_va_to_pa((pagetable_t)(current[tp]->pagetable), (void *)buf);
   sprint(pa);
+  return 0;
+}
+
+ssize_t sys_user_scanf(const char *buf)
+{
+  int tp = read_tp();
+  // buf is now an address in user space of the given app's user stack,
+  // so we have to transfer it into phisical address (kernel is running in direct mapping).
+  assert(current[tp]);
+  char *pa = (char *)user_va_to_pa((pagetable_t)(current[tp]->pagetable), (void *)buf);
+  spike_file_read(stderr, pa, 256);
   return 0;
 }
 
@@ -411,6 +424,22 @@ ssize_t sys_user_print_backtrace(int depth)
   return 0;
 }
 
+ssize_t sys_user_read_cwd(char *pathva)
+{
+  int tp = read_tp();
+  char *pathpa = (char *)user_va_to_pa((pagetable_t)(current[tp]->pagetable), pathva);
+  struct dentry *cwd = current[tp]->pfiles->cwd;
+  return do_rcwd(cwd, pathpa);
+}
+
+ssize_t sys_user_change_cwd(char *pathva)
+{
+  int tp = read_tp();
+  char *pathpa = (char *)user_va_to_pa((pagetable_t)(current[tp]->pagetable), pathva);
+  struct dentry *cwd = current[tp]->pfiles->cwd;
+  return do_ccwd(cwd, pathpa);
+}
+
 //
 // [a0]: the syscall number; [a1] ... [a7]: arguments to the syscalls.
 // returns the code of success, (e.g., 0 means success, fail for otherwise)
@@ -421,6 +450,8 @@ long do_syscall(long a0, long a1, long a2, long a3, long a4, long a5, long a6, l
   {
   case SYS_user_print:
     return sys_user_print((const char *)a1, a2);
+  case SYS_user_scanf:
+    return sys_user_scanf((const char *)a1);
   case SYS_user_printpa:
     return sys_user_printpa(a1);
   case SYS_user_exit:
@@ -481,6 +512,12 @@ long do_syscall(long a0, long a1, long a2, long a3, long a4, long a5, long a6, l
 
   case SYS_user_print_backtrace:
     return sys_user_print_backtrace(a1);
+
+  // added lab4_c1
+  case SYS_user_rcwd:
+    return sys_user_read_cwd((char *)a1);
+  case SYS_user_ccwd:
+    return sys_user_change_cwd((char *)a1);
 
   default:
     panic("Unknown syscall %ld \n", a0);

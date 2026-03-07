@@ -45,6 +45,30 @@ int printu(const char *s, ...)
   return do_user_call(SYS_user_print, (uint64)buf, n, 0, 0, 0, 0, 0);
 }
 
+int scanfu(const char *fmt, ...)
+{
+  if (!(fmt && fmt[0] == '%' && fmt[1] == 's' && fmt[2] == '\0'))
+    return 0; // only support "%s"
+
+  va_list vl;
+  va_start(vl, fmt);
+  char *out = va_arg(vl, char *);
+  va_end(vl);
+
+  char in[256];
+  do_user_call(SYS_user_scanf, (uint64)in, 0, 0, 0, 0, 0, 0);
+
+  int i = 0;
+  while (in[i] && in[i] != ' ' && in[i] != '\n' && in[i] != '\t')
+  {
+    out[i] = in[i];
+    i++;
+  }
+  out[i] = '\0';
+
+  return 1;
+}
+
 void printpa(int *va)
 {
   do_user_call(SYS_user_printpa, (uint64)va, 0, 0, 0, 0, 0, 0);
@@ -235,4 +259,20 @@ void sem_V(int sid)
 int print_backtrace(int depth)
 {
   return do_user_call(SYS_user_print_backtrace, depth, 0, 0, 0, 0, 0, 0);
+}
+
+//
+// lib call to read present working directory (pwd)
+//
+int read_cwd(char *path)
+{
+  return do_user_call(SYS_user_rcwd, (uint64)path, 0, 0, 0, 0, 0, 0);
+}
+
+//
+// lib call to change pwd
+//
+int change_cwd(const char *path)
+{
+  return do_user_call(SYS_user_ccwd, (uint64)path, 0, 0, 0, 0, 0, 0);
 }

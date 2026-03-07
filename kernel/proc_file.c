@@ -50,7 +50,7 @@ proc_file_management *init_proc_file_management(void)
   for (int fd = 0; fd < MAX_FILES; ++fd)
     pfiles->opened_files[fd].status = FD_NONE;
 
-  sprint("FS: created a file management struct for a process.\n");
+  // sprint("FS: created a file management struct for a process.\n");
   return pfiles;
 }
 
@@ -254,4 +254,14 @@ int do_link(char *oldpath, char *newpath)
 int do_unlink(char *path)
 {
   return vfs_unlink(path);
+}
+
+int do_rcwd(struct dentry *cwd, char *pathbuf)
+{
+  return vfs_rcwd(cwd, pathbuf);
+}
+
+int do_ccwd(struct dentry *cwd, char *pathbuf)
+{
+  return vfs_ccwd(cwd, pathbuf);
 }

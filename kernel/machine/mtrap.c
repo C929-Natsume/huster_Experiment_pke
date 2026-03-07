@@ -9,9 +9,9 @@ static void handle_instruction_access_fault() { panic("Instruction access fault!
 
 static void handle_load_access_fault()
 {
-  uint64 mepc = read_csr(mepc);
-  uint64 mtval = read_csr(mtval);
-  sprint("Load access fault! mepc=%p mtval=%p\n", mepc, mtval);
+  // uint64 mepc = read_csr(mepc);
+  // uint64 mtval = read_csr(mtval);
+  // sprint("Load access fault! mepc=%p mtval=%p\n", mepc, mtval);
   panic("Load access fault!");
 }
 

@@ -402,8 +402,8 @@ process *alloc_process()
   // map user stack in userspace
   user_vm_map((pagetable_t)procs[i].pagetable, USER_STACK_TOP - PGSIZE, PGSIZE,
               user_stack, prot_to_type(PROT_WRITE | PROT_READ, 1));
-  sprint("alloc_proc pid=%d: stack VA 0x%lx -> PA 0x%lx\n",
-         procs[i].pid, (uint64)(USER_STACK_TOP - PGSIZE), (uint64)user_stack);
+  // sprint("alloc_proc pid=%d: stack VA 0x%lx -> PA 0x%lx\n",
+  //        procs[i].pid, (uint64)(USER_STACK_TOP - PGSIZE), (uint64)user_stack);
   procs[i].mapped_info[STACK_SEGMENT].va = USER_STACK_TOP - PGSIZE;
   procs[i].mapped_info[STACK_SEGMENT].npages = 1;
   procs[i].mapped_info[STACK_SEGMENT].seg_type = STACK_SEGMENT;
@@ -423,8 +423,8 @@ process *alloc_process()
   procs[i].mapped_info[SYSTEM_SEGMENT].npages = 1;
   procs[i].mapped_info[SYSTEM_SEGMENT].seg_type = SYSTEM_SEGMENT;
 
-  sprint("in alloc_proc. user frame 0x%lx, user stack 0x%lx, user kstack 0x%lx \n",
-         procs[i].trapframe, procs[i].trapframe->regs.sp, procs[i].kstack);
+  // sprint("in alloc_proc. user frame 0x%lx, user stack 0x%lx, user kstack 0x%lx \n",
+  //        procs[i].trapframe, procs[i].trapframe->regs.sp, procs[i].kstack);
 
   // sprint("in alloc_proc. user frame 0x%lx, user stack 0x%lx, user kstack 0x%lx \n",
   //        procs[i].trapframe, procs[i].trapframe->regs.sp, procs[i].kstack);
@@ -450,7 +450,7 @@ process *alloc_process()
 
   // initialize files_struct
   procs[i].pfiles = init_proc_file_management();
-  sprint("in alloc_proc. build proc_file_management successfully.\n");
+  // sprint("in alloc_proc. build proc_file_management successfully.\n");
 
   // spinlock_amo_unlock(&proc_alloc_lock);
   // return after initialization.
@@ -549,7 +549,7 @@ int do_fork(process *parent)
       uint64 pa = lookup_pa(parent->pagetable, va);
       user_vm_map((pagetable_t)child->pagetable, va, parent->mapped_info[i].npages * PGSIZE, pa,
                   prot_to_type(PROT_READ | PROT_EXEC, 1));
-      sprint("do_fork map code segment at pa:%lx of parent to child at va:%lx.\n", pa, va);
+      // sprint("do_fork map code segment at pa:%lx of parent to child at va:%lx.\n", pa, va);
 
       // after mapping, register the vm region (do not delete codes below!)
       child->mapped_info[child->total_mapped_region].va = parent->mapped_info[i].va;

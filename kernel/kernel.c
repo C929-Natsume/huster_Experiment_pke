@@ -131,10 +131,12 @@ int s_start(void)
   // added @lab3_1
   arg_buf arg_bug_msg;
   size_t argc = parse_args(&arg_bug_msg);
-  process *pr = load_user_program();
   if (!argc)
     panic("You need to specify the application program!\n");
+  process *pr = NULL;
   if (tp < argc)
+    pr = load_user_program();
+  if (pr)
     insert_to_ready_queue(pr);
   // insert_to_ready_queue(load_user_program());
   schedule();

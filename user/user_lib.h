@@ -45,5 +45,9 @@ void sem_P(int sid);
 void sem_V(int sid);
 
 int print_backtrace(int depth);
+int scanfu(const char *s, ...);
+
+int read_cwd(char *path);
+int change_cwd(const char *path);
 
 #endif

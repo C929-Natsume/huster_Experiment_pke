@@ -64,7 +64,7 @@ void handle_mtimer_trap()
 void handle_user_page_fault(uint64 mcause, uint64 sepc, uint64 stval)
 {
   int tp = read_tp();
-  sprint("handle_page_fault: %lx\n", stval);
+  // sprint("handle_page_fault: %lx\n", stval);
   switch (mcause)
   {
   case CAUSE_STORE_PAGE_FAULT:
@@ -197,28 +197,28 @@ void smode_trap_handler(void)
     sprint("            sepc=%p stval=%p\n", read_csr(sepc), read_csr(stval));
     panic("unexpected exception happened.\n");
     break;
-  // default:
-  // {
-  //   uint64 sepc_val = read_csr(sepc);
-  //   uint64 stval_val = read_csr(stval);
-  //   sprint("smode_trap_handler(): unexpected scause %p\n", read_csr(scause));
-  //   sprint("            sepc=%p stval=%p\n", sepc_val, stval_val);
-  //   /* 取指 fault @ 0 排查：区分用户跳 0 与 trapframe 恢复错 */
-  //   if (cause == 0xc) {  /* CAUSE_FETCH_PAGE_FAULT */
-  //     sprint("[FETCH_PAGE_FAULT] hartid=%d pid=%d\n", tp, current[tp] ? (int)current[tp]->pid : -1);
-  //     if (current[tp]) {
-  //       sprint("            trapframe->epc (saved PC)=%p\n", (void *)current[tp]->trapframe->epc);
-  //       sprint("            trapframe->ra =%p a0=%p a1=%p\n",
-  //              (void *)current[tp]->trapframe->regs.ra,
-  //              (void *)current[tp]->trapframe->regs.a0,
-  //              (void *)current[tp]->trapframe->regs.a1);
-  //     }
-  //     if (sepc_val == 0 || stval_val == 0)
-  //       sprint("            => PC/fault_addr is 0: likely null call or wrong trapframe restore\n");
-  //   }
-  //   panic("unexpected exception happened.\n");
-  //   break;
-  // }
+    // default:
+    // {
+    //   uint64 sepc_val = read_csr(sepc);
+    //   uint64 stval_val = read_csr(stval);
+    //   sprint("smode_trap_handler(): unexpected scause %p\n", read_csr(scause));
+    //   sprint("            sepc=%p stval=%p\n", sepc_val, stval_val);
+    //   /* 取指 fault @ 0 排查：区分用户跳 0 与 trapframe 恢复错 */
+    //   if (cause == 0xc) {  /* CAUSE_FETCH_PAGE_FAULT */
+    //     sprint("[FETCH_PAGE_FAULT] hartid=%d pid=%d\n", tp, current[tp] ? (int)current[tp]->pid : -1);
+    //     if (current[tp]) {
+    //       sprint("            trapframe->epc (saved PC)=%p\n", (void *)current[tp]->trapframe->epc);
+    //       sprint("            trapframe->ra =%p a0=%p a1=%p\n",
+    //              (void *)current[tp]->trapframe->regs.ra,
+    //              (void *)current[tp]->trapframe->regs.a0,
+    //              (void *)current[tp]->trapframe->regs.a1);
+    //     }
+    //     if (sepc_val == 0 || stval_val == 0)
+    //       sprint("            => PC/fault_addr is 0: likely null call or wrong trapframe restore\n");
+    //   }
+    //   panic("unexpected exception happened.\n");
+    //   break;
+    // }
   }
 
   // continue (come back to) the execution of current process.
