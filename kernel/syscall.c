@@ -61,17 +61,39 @@ ssize_t sys_user_printpa(uint64 va)
 //
 // implement the SYS_user_exit syscall
 //
+// ssize_t sys_user_exit(uint64 code)
+// {
+//   int tp = read_tp();
+//   sprint("hartid = %d: User exit with code:%d.\n", tp, code);
+//   // reclaim the current process, and reschedule. added @lab3_1
+//   free_process(current[tp]);
+
+//   if (current[tp]->parent && current[tp]->parent->status == BLOCKED)
+//   {
+//     current[tp]->parent->status = READY;
+//     insert_to_ready_queue(current[tp]->parent);
+//   }
+
+//   schedule();
+//   return 0;
+// }
+
 ssize_t sys_user_exit(uint64 code)
 {
   int tp = read_tp();
-  sprint("hartid = %d: User exit with code:%d.\n", tp, code);
-  // reclaim the current process, and reschedule. added @lab3_1
-  free_process(current[tp]);
+  process *self = current[tp];
+  process *parent = self->parent;
 
-  if (current[tp]->parent && current[tp]->parent->status == BLOCKED)
+  sprint("hartid = %d: User exit with code:%d.\n", tp, code);
+
+  // 当前进程置为 ZOMBIE
+  free_process(self);
+
+  // 唤醒阻塞在 wait 的父进程（若有）
+  if (parent && parent->status == BLOCKED)
   {
-    current[tp]->parent->status = READY;
-    insert_to_ready_queue(current[tp]->parent);
+    parent->status = READY;
+    insert_to_ready_queue(parent);
   }
 
   schedule();

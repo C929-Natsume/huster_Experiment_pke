@@ -7,7 +7,6 @@
 int main(void)
 {
     void *p[N];
-    printpa((int *)p);
 
     for (int i = 0; i < N; i++)
     {
