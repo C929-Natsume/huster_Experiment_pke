@@ -8,5 +8,6 @@
 
 void insert_to_ready_queue(process *proc);
 void schedule();
+void kill_current_process(const char *reason, int code);
 
 #endif

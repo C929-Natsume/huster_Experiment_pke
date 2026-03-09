@@ -352,7 +352,7 @@ elf_status elf_load(elf_ctx *ctx)
 void load_bincode_from_host_elf(process *p, char *filename)
 {
   int tp = read_tp();
-  sprint("Application: %s\n", filename);
+  // sprint("Application: %s\n", filename);
 
   // elf loading. elf_ctx is defined in kernel/elf.h, used to track the loading process.
   // elf_ctx elfloader;
@@ -383,7 +383,7 @@ void load_bincode_from_host_elf(process *p, char *filename)
   // close the vfs file
   vfs_close(info.f);
 
-  sprint("Application program entry point (virtual address): 0x%lx\n", p->trapframe->epc);
+  // sprint("Application program entry point (virtual address): 0x%lx\n", p->trapframe->epc);
 }
 
 // load
@@ -410,7 +410,7 @@ int do_exec(process *p, char *path, char *argv)
   }
 
   clr_proc(p);
-  sprint("Application: %s\n", path);
+  // sprint("Application: %s\n", path);
 
   // elf_ctx elfloader;
   elf_info info;
@@ -433,7 +433,7 @@ int do_exec(process *p, char *path, char *argv)
   p->trapframe->epc = elfloader[tp].ehdr.entry;
   vfs_close(info.f);
 
-  sprint("Application program entry point (virtual address): 0x%lx\n", p->trapframe->epc);
+  // sprint("Application program entry point (virtual address): 0x%lx\n", p->trapframe->epc);
 
   uint64 va = p->user_heap.heap_top;
   void *pa = alloc_page();

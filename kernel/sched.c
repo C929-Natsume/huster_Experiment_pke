@@ -212,7 +212,7 @@ void schedule()
       current[tp]->status = RUNNING;
       spinlock_amo_unlock(&rq_lock);
 
-      sprint("going to schedule process %d to run on hart %d.\n", current[tp]->pid, tp);
+      // sprint("going to schedule process %d to run on hart %d.\n", current[tp]->pid, tp);
       switch_to(current[tp]);
       return;
     }
@@ -223,8 +223,8 @@ void schedule()
     {
       if (tp == 0)
       {
-        sprint("no more ready processes, system shutdown now.\n");
-        sprint("hartid = %d: shutdown.\n", tp);
+        // sprint("no more ready processes, system shutdown now.\n");
+        // sprint("hartid = %d: shutdown.\n", tp);
         shutdown(0);
       }
 
@@ -236,4 +236,20 @@ void schedule()
     // 3) 暂无可运行任务，等待中断再重试，避免忙等
     asm volatile("wfi");
   }
+}
+
+void kill_current_process(const char *reason, int code)
+{
+  int tp = read_tp();
+  process *self = current[tp];
+  process *parent = self->parent;
+  sprint("%s\n", reason);
+  sprint("hartid = %d: User exit with code:%d.\n", tp, -1);
+  free_process(self);
+  if (parent && parent->status == BLOCKED)
+  {
+    parent->status = READY;
+    insert_to_ready_queue(parent);
+  }
+  schedule();
 }

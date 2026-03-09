@@ -481,7 +481,7 @@ int free_process(process *proc)
 int do_fork(process *parent)
 {
   int tp = read_tp();
-  sprint("will fork a child from parent %d.\n", parent->pid);
+  // sprint("will fork a child from parent %d.\n", parent->pid);
   process *child = alloc_process();
 
   for (int i = 0; i < parent->total_mapped_region; i++)

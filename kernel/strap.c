@@ -13,6 +13,7 @@
 #include "memlayout.h"
 #include "spike_interface/spike_utils.h"
 #include "string.h"
+#include "sched.h"
 
 //
 // handling the syscalls. will call do_syscall() defined in kernel/syscall.c
@@ -74,7 +75,7 @@ void handle_user_page_fault(uint64 mcause, uint64 sepc, uint64 stval)
     // virtual address that causes the page fault.
     if (stval > USER_STACK_TOP)
     {
-      panic("invalid memory access at address 0x%lx\n", stval);
+      kill_current_process("invalid memory access at address\n", 1);
     }
     if (stval <= USER_STACK_TOP && stval > USER_STACK_TOP - current[tp]->size)
     {
@@ -84,7 +85,7 @@ void handle_user_page_fault(uint64 mcause, uint64 sepc, uint64 stval)
     }
     else if (stval <= USER_STACK_TOP - current[tp]->size && stval >= current[tp]->user_heap.heap_top)
     {
-      panic("this address is not available!");
+      kill_current_process("this address is not available!", 1);
     }
 
     break;
@@ -177,7 +178,7 @@ void smode_trap_handler(void)
       }
       else if (fault_va <= USER_STACK_TOP - current[tp]->size && fault_va >= current[tp]->user_heap.heap_top)
       {
-        panic("this address is not available!");
+        kill_current_process("this address is not available!", 1);
       }
       else
       {
@@ -192,6 +193,9 @@ void smode_trap_handler(void)
     // call handle_user_page_fault to process page faults
     handle_user_page_fault(cause, read_csr(sepc), read_csr(stval));
     break;
+  case CAUSE_ILLEGAL_INSTRUCTION:
+    kill_current_process("", -1);
+    return;
   default:
     sprint("smode_trap_handler(): unexpected scause %p\n", read_csr(scause));
     sprint("            sepc=%p stval=%p\n", read_csr(sepc), read_csr(stval));

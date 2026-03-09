@@ -83,10 +83,10 @@ process *load_user_program()
   if (!argc)
     panic("You need to specify the application program!\n");
   char *app_path = (tp < argc) ? arg_bug_msg.argv[tp] : arg_bug_msg.argv[0];
-  sprint("hartid = %d: Application: %s\n", tp, app_path);
+  // sprint("hartid = %d: Application: %s\n", tp, app_path);
 
   load_bincode_from_host_elf(proc, app_path);
-  sprint("hartid = %d: Application program entry point (virtual address): 0x%lx\n", tp, proc->trapframe->epc);
+  // sprint("hartid = %d: Application program entry point (virtual address): 0x%lx\n", tp, proc->trapframe->epc);
   proc->size = 20 * PGSIZE; // init stack size to 20 pages
   return proc;
 }

@@ -84,7 +84,7 @@ ssize_t sys_user_exit(uint64 code)
   process *self = current[tp];
   process *parent = self->parent;
 
-  sprint("hartid = %d: User exit with code:%d.\n", tp, code);
+  // sprint("hartid = %d: User exit with code:%d.\n", tp, code);
 
   // 当前进程置为 ZOMBIE
   free_process(self);
@@ -167,7 +167,7 @@ uint64 sys_user_better_free_page(uint64 va)
 ssize_t sys_user_fork()
 {
   int tp = read_tp();
-  sprint("User call fork.\n");
+  // sprint("User call fork.\n");
   return do_fork(current[tp]);
 }
 

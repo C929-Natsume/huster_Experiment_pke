@@ -5,6 +5,15 @@
 #include "string.h"
 #include "kernel/elf.h"
 
+#include "kernel/sched.h"
+
+int m_forward_to_s = 0;
+uint64 m_forward_sepc = 0;
+uint64 m_forward_scause = 0;
+uint64 m_forward_stval = 0;
+uint64 m_forward_sscratch = 0;
+uint64 m_forward_sstatus = 0;
+
 static void handle_instruction_access_fault() { panic("Instruction access fault!"); }
 
 static void handle_load_access_fault()
@@ -162,10 +171,38 @@ static void print_errorline()
 //   }
 // }
 
-static void handle_illegal_instruction()
+// static void handle_illegal_instruction()
+// {
+//   print_errorline();
+//   panic("Illegal instruction!");
+// }
+
+static void handle_illegal_instruction(void)
 {
+  uint64 mstatus_val = read_csr(mstatus);
+  uint64 mpp = mstatus_val & MSTATUS_MPP_MASK;
+
+  if (mpp != MSTATUS_MPP_U && mpp != MSTATUS_MPP_S)
+  {
+    print_errorline();
+    panic("Illegal instruction (from M-mode)!");
+  }
+
+  int tp = read_tp();
+  if (!current[tp])
+  {
+    panic("Illegal instruction: no current process");
+  }
+
   print_errorline();
-  panic("Illegal instruction!");
+  sprint("Illegal instruction!\n");
+
+  m_forward_to_s = 1;
+  m_forward_sepc = read_csr(mepc);
+  m_forward_scause = read_csr(mcause);
+  m_forward_stval = read_csr(mtval);
+  m_forward_sscratch = (uint64)current[tp]->trapframe;
+  m_forward_sstatus = (read_csr(sstatus) & ~SSTATUS_SPP) | SSTATUS_SPIE;
 }
 
 static void handle_misaligned_load() { panic("Misaligned Load!"); }
@@ -188,6 +225,7 @@ static void handle_timer()
 //
 void handle_mtrap()
 {
+  m_forward_to_s = 0;
   uint64 mcause = read_csr(mcause);
   switch (mcause)
   {
