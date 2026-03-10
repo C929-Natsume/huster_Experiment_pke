@@ -10,6 +10,7 @@
 #include "pmm.h"
 #include "vfs.h"
 #include "spike_interface/spike_utils.h"
+#include "sched.h"
 
 elf_ctx elfloader[NCPU];
 
@@ -24,7 +25,7 @@ static void *elf_alloc_mb(elf_ctx *ctx, uint64 elf_pa, uint64 elf_va, uint64 siz
   kassert(size < PGSIZE);
   void *pa = alloc_page();
   if (pa == 0)
-    panic("uvmalloc mem alloc falied\n");
+    kill_current_process("uvmalloc mem alloc falied\n", -1);
 
   memset((void *)pa, 0, PGSIZE);
   // sprint("elf_alloc_mb: elf_va=%p, pa=%p\n", elf_va, pa);
@@ -338,7 +339,7 @@ elf_status elf_load(elf_ctx *ctx)
       // sprint("DATA_SEGMENT added at mapped info offset:%d\n", j);
     }
     else
-      panic("unknown program segment encountered, segment flag:%d.\n", ph_addr.flags);
+      kill_current_process("unknown program segment encountered, segment flag:%d.\n", ph_addr.flags);
 
     ((process *)(((elf_info *)(ctx->info))->p))->total_mapped_region++;
   }
@@ -363,19 +364,19 @@ void load_bincode_from_host_elf(process *p, char *filename)
   info.p = p;
   // IS_ERR_VALUE is a macro defined in spike_interface/spike_htif.h
   if (IS_ERR_VALUE(info.f))
-    panic("Fail on openning the input application program.\n");
+    kill_current_process("Fail on openning the input application program.\n", -1);
 
   // init elfloader context. elf_init() is defined above.
   if (elf_init(&elfloader[tp], &info) != EL_OK)
-    panic("fail to init elfloader.\n");
+    kill_current_process("fail to init elfloader.\n", -1);
 
   // load elf. elf_load() is defined above.
   if (elf_load(&elfloader[tp]) != EL_OK)
-    panic("Fail on loading elf.\n");
+    kill_current_process("Fail on loading elf.\n", -1);
 
   // load .debug_line
   if (load_debug_line(&elfloader[tp]) != EL_OK)
-    panic("Fail on loading .debug_line.\n");
+    kill_current_process("Fail on loading .debug_line.\n", -1);
 
   // entry (virtual, also physical in lab1_x) address
   p->trapframe->epc = elfloader[tp].ehdr.entry;
@@ -418,17 +419,17 @@ int do_exec(process *p, char *path, char *argv)
   info.f = vfs_open(path, O_RDONLY);
   info.p = p;
   if (IS_ERR_VALUE(info.f))
-    panic("Fail on openning the input application program.\n");
+    kill_current_process("Fail on openning the input application program.\n", -1);
 
   if (elf_init(&elfloader[tp], &info) != EL_OK)
-    panic("fail to init elfloader.\n");
+    kill_current_process("fail to init elfloader.\n", -1);
 
   if (elf_load(&elfloader[tp]) != EL_OK)
-    panic("Fail on loading elf.\n");
+    kill_current_process("Fail on loading elf.\n", -1);
 
   // load .debug_line
   if (load_debug_line(&elfloader[tp]) != EL_OK)
-    panic("Fail on loading .debug_line.\n");
+    kill_current_process("Fail on loading .debug_line.\n", -1);
 
   p->trapframe->epc = elfloader[tp].ehdr.entry;
   vfs_close(info.f);

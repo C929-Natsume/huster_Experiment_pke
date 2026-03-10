@@ -16,7 +16,7 @@ int main()
 {
     char cmd[24];
     char arg[20];
-    printu("START\n\n");
+    printu("\n============================START============================\n\n");
 
     while (1)
     {
@@ -28,6 +28,11 @@ int main()
             printu("Exit.\n");
             break;
         }
+
+        if (!cmd[0])
+        {
+            continue;
+        };
 
         if (cmd[0] == 't' && cmd[1] == 'e' && cmd[2] == 's' && cmd[3] == 't')
         {

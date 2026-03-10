@@ -81,7 +81,7 @@ process *load_user_program()
   // retrieve command line arguements
   size_t argc = parse_args(&arg_bug_msg);
   if (!argc)
-    panic("You need to specify the application program!\n");
+    kill_current_process("You need to specify the application program!\n", -1);
   char *app_path = (tp < argc) ? arg_bug_msg.argv[tp] : arg_bug_msg.argv[0];
   // sprint("hartid = %d: Application: %s\n", tp, app_path);
 
@@ -132,7 +132,7 @@ int s_start(void)
   arg_buf arg_bug_msg;
   size_t argc = parse_args(&arg_bug_msg);
   if (!argc)
-    panic("You need to specify the application program!\n");
+    kill_current_process("You need to specify the application program!\n", -1);
   process *pr = NULL;
   if (tp < argc)
     pr = load_user_program();

@@ -10,6 +10,7 @@
 #include "util/types.h"
 #include "util/hash_table.h"
 #include "process.h"
+#include "sched.h"
 
 struct dentry *vfs_root_dentry;              // system root direntry
 struct super_block *vfs_sb_list[MAX_MOUNTS]; // system superblock list
@@ -63,7 +64,7 @@ struct super_block *vfs_mount(const char *dev_name, int mnt_type)
       break;
   }
   if (p_device == NULL)
-    panic("vfs_mount: cannot find the device entry!\n");
+    kill_current_process("vfs_mount: cannot find the device entry!\n", -1);
 
   // add the super block into vfs_sb_list
   struct file_system_type *fs_type = p_device->fs_type;
@@ -83,7 +84,7 @@ struct super_block *vfs_mount(const char *dev_name, int mnt_type)
     }
   }
   if (err)
-    panic("vfs_mount: too many mounts!\n");
+    kill_current_process("vfs_mount: too many mounts!\n", -1);
 
   // mount the root dentry of the file system to right place
   if (mnt_type == MOUNT_AS_ROOT)
@@ -96,7 +97,7 @@ struct super_block *vfs_mount(const char *dev_name, int mnt_type)
   else if (mnt_type == MOUNT_DEFAULT)
   {
     if (!vfs_root_dentry)
-      panic("vfs_mount: root dentry not found, please mount the root device first!\n");
+      kill_current_process("vfs_mount: root dentry not found, please mount the root device first!\n", -1);
 
     struct dentry *mnt_point = sb->s_root;
 
@@ -112,7 +113,7 @@ struct super_block *vfs_mount(const char *dev_name, int mnt_type)
   }
   else
   {
-    panic("vfs_mount: unknown mount type!\n");
+    kill_current_process("vfs_mount: unknown mount type!\n", -1);
   }
 
   return sb;
@@ -165,7 +166,7 @@ struct file *vfs_open(const char *path, int flags)
       file_dentry = alloc_vfs_dentry(basename, NULL, parent);
       struct vinode *new_inode = viop_create(parent->dentry_inode, file_dentry);
       if (!new_inode)
-        panic("vfs_open: cannot create file!\n");
+        kill_current_process("vfs_open: cannot create file!\n", -1);
 
       file_dentry->dentry_inode = new_inode;
       new_inode->ref++;
@@ -203,7 +204,7 @@ struct file *vfs_open(const char *path, int flags)
     readable = 1;
     break;
   default:
-    panic("fs_open: invalid open flags!\n");
+    kill_current_process("fs_open: invalid open flags!\n", -1);
   }
 
   struct file *file = alloc_vfs_file(file_dentry, readable, writable, 0);
@@ -541,7 +542,7 @@ int vfs_close(struct file *file)
     {
       // write back the inode and free it
       if (viop_write_back_vinode(inode) != 0)
-        panic("vfs_close: free inode failed!\n");
+        kill_current_process("vfs_close: free inode failed!\n", -1);
       hash_erase_vinode(inode);
       free_page(inode);
     }

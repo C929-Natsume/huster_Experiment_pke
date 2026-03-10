@@ -9,6 +9,7 @@
 #include "util/string.h"
 #include "util/types.h"
 #include "vfs.h"
+#include "sched.h"
 
 /**** host-fs vinode interface ****/
 const struct vinode_ops hostfs_i_ops = {
@@ -34,13 +35,16 @@ const struct vinode_ops hostfs_i_ops = {
 //
 // append hostfs to the fs list.
 //
-int register_hostfs() {
+int register_hostfs()
+{
   struct file_system_type *fs_type = (struct file_system_type *)alloc_page();
   fs_type->type_num = HOSTFS_TYPE;
   fs_type->get_superblock = hostfs_get_superblock;
 
-  for (int i = 0; i < MAX_SUPPORTED_FS; i++) {
-    if (fs_list[i] == NULL) {
+  for (int i = 0; i < MAX_SUPPORTED_FS; i++)
+  {
+    if (fs_list[i] == NULL)
+    {
       fs_list[i] = fs_type;
       return 0;
     }
@@ -51,17 +55,20 @@ int register_hostfs() {
 //
 // append new device under "name" to vfs_dev_list.
 //
-struct device *init_host_device(char *name) {
+struct device *init_host_device(char *name)
+{
   // find rfs in registered fs list
   struct file_system_type *fs_type = NULL;
-  for (int i = 0; i < MAX_SUPPORTED_FS; i++) {
-    if (fs_list[i] != NULL && fs_list[i]->type_num == HOSTFS_TYPE) {
+  for (int i = 0; i < MAX_SUPPORTED_FS; i++)
+  {
+    if (fs_list[i] != NULL && fs_list[i]->type_num == HOSTFS_TYPE)
+    {
       fs_type = fs_list[i];
       break;
     }
   }
   if (!fs_type)
-    panic("init_host_device: No HOSTFS file system found!\n");
+    kill_current_process("init_host_device: No HOSTFS file system found!\n", -1);
 
   // allocate a vfs device
   struct device *device = (struct device *)alloc_page();
@@ -72,8 +79,10 @@ struct device *init_host_device(char *name) {
   device->fs_type = fs_type;
 
   // add the device to the vfs device list
-  for (int i = 0; i < MAX_VFS_DEV; i++) {
-    if (vfs_dev_list[i] == NULL) {
+  for (int i = 0; i < MAX_VFS_DEV; i++)
+  {
+    if (vfs_dev_list[i] == NULL)
+    {
       vfs_dev_list[i] = device;
       break;
     }
@@ -85,8 +94,10 @@ struct device *init_host_device(char *name) {
 //
 // recursive call to assemble a path.
 //
-void path_backtrack(char *path, struct dentry *dentry) {
-  if (dentry->parent == NULL) {
+void path_backtrack(char *path, struct dentry *dentry)
+{
+  if (dentry->parent == NULL)
+  {
     return;
   }
   path_backtrack(path, dentry->parent);
@@ -97,7 +108,8 @@ void path_backtrack(char *path, struct dentry *dentry) {
 //
 // obtain the absolute path for "dentry", from root to file.
 //
-void get_path_string(char *path, struct dentry *dentry) {
+void get_path_string(char *path, struct dentry *dentry)
+{
   strcpy(path, H_ROOT_DIR);
   path_backtrack(path, dentry);
 }
@@ -105,9 +117,10 @@ void get_path_string(char *path, struct dentry *dentry) {
 //
 // allocate a vfs inode for an host fs file.
 //
-struct vinode *hostfs_alloc_vinode(struct super_block *sb) {
+struct vinode *hostfs_alloc_vinode(struct super_block *sb)
+{
   struct vinode *vinode = default_alloc_vinode(sb);
-  vinode->inum = -1; 
+  vinode->inum = -1;
   vinode->i_fs_info = NULL;
   vinode->i_ops = &hostfs_i_ops;
   return vinode;
@@ -118,9 +131,11 @@ int hostfs_write_back_vinode(struct vinode *vinode) { return 0; }
 //
 // populate the vfs inode of an hostfs file, according to its stats.
 //
-int hostfs_update_vinode(struct vinode *vinode) {
+int hostfs_update_vinode(struct vinode *vinode)
+{
   spike_file_t *f = vinode->i_fs_info;
-  if ((int64)f < 0) {  // is a direntry
+  if ((int64)f < 0)
+  { // is a direntry
     vinode->type = H_DIR;
     return -1;
   }
@@ -133,11 +148,16 @@ int hostfs_update_vinode(struct vinode *vinode) {
   vinode->nlinks = stat.st_nlink;
   vinode->blocks = stat.st_blocks;
 
-  if (S_ISDIR(stat.st_mode)) {
+  if (S_ISDIR(stat.st_mode))
+  {
     vinode->type = H_DIR;
-  } else if (S_ISREG(stat.st_mode)) {
+  }
+  else if (S_ISREG(stat.st_mode))
+  {
     vinode->type = H_FILE;
-  } else {
+  }
+  else
+  {
     sprint("hostfs_lookup:unknown file type!");
     return -1;
   }
@@ -150,9 +170,11 @@ int hostfs_update_vinode(struct vinode *vinode) {
 // read a hostfs file.
 //
 ssize_t hostfs_read(struct vinode *f_inode, char *r_buf, ssize_t len,
-                    int *offset) {
+                    int *offset)
+{
   spike_file_t *pf = (spike_file_t *)f_inode->i_fs_info;
-  if (pf < 0) {
+  if (pf < 0)
+  {
     sprint("hostfs_read: invalid file handle!\n");
     return -1;
   }
@@ -166,9 +188,11 @@ ssize_t hostfs_read(struct vinode *f_inode, char *r_buf, ssize_t len,
 // write a hostfs file.
 //
 ssize_t hostfs_write(struct vinode *f_inode, const char *w_buf, ssize_t len,
-                     int *offset) {
+                     int *offset)
+{
   spike_file_t *pf = (spike_file_t *)f_inode->i_fs_info;
-  if (pf < 0) {
+  if (pf < 0)
+  {
     sprint("hostfs_write: invalid file handle!\n");
     return -1;
   }
@@ -181,7 +205,8 @@ ssize_t hostfs_write(struct vinode *f_inode, const char *w_buf, ssize_t len,
 //
 // lookup a hostfs file, and establish its vfs inode in PKE vfs.
 //
-struct vinode *hostfs_lookup(struct vinode *parent, struct dentry *sub_dentry) {
+struct vinode *hostfs_lookup(struct vinode *parent, struct dentry *sub_dentry)
+{
   // get complete path string
   char path[MAX_PATH_LEN];
   get_path_string(path, sub_dentry);
@@ -197,14 +222,16 @@ struct vinode *hostfs_lookup(struct vinode *parent, struct dentry *sub_dentry) {
 }
 
 //
-// creates a hostfs file, and establish its vfs inode. 
+// creates a hostfs file, and establish its vfs inode.
 //
-struct vinode *hostfs_create(struct vinode *parent, struct dentry *sub_dentry) {
+struct vinode *hostfs_create(struct vinode *parent, struct dentry *sub_dentry)
+{
   char path[MAX_PATH_LEN];
   get_path_string(path, sub_dentry);
 
   spike_file_t *f = spike_file_open(path, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
-  if ((int64)f < 0) {
+  if ((int64)f < 0)
+  {
     sprint("hostfs_create cannot create the given file.\n");
     return NULL;
   }
@@ -212,7 +239,8 @@ struct vinode *hostfs_create(struct vinode *parent, struct dentry *sub_dentry) {
   struct vinode *new_inode = hostfs_alloc_vinode(parent->sb);
   new_inode->i_fs_info = f;
 
-  if (hostfs_update_vinode(new_inode) != 0) return NULL;
+  if (hostfs_update_vinode(new_inode) != 0)
+    return NULL;
 
   new_inode->ref = 0;
   return new_inode;
@@ -222,9 +250,11 @@ struct vinode *hostfs_create(struct vinode *parent, struct dentry *sub_dentry) {
 // reposition read/write file offset
 //
 int hostfs_lseek(struct vinode *f_inode, ssize_t new_offset, int whence,
-                  int *offset) {
+                 int *offset)
+{
   spike_file_t *f = (spike_file_t *)f_inode->i_fs_info;
-  if (f < 0) {
+  if (f < 0)
+  {
     sprint("hostfs_lseek: invalid file handle!\n");
     return -1;
   }
@@ -236,23 +266,27 @@ int hostfs_lseek(struct vinode *f_inode, ssize_t new_offset, int whence,
 }
 
 int hostfs_link(struct vinode *parent, struct dentry *sub_dentry,
-                struct vinode *link_node) {
-  panic("hostfs_link not implemented!\n");
+                struct vinode *link_node)
+{
+  kill_current_process("hostfs_link not implemented!\n", -1);
   return -1;
 }
 
-int hostfs_unlink(struct vinode *parent, struct dentry *sub_dentry, struct vinode *unlink_node) {
-  panic("hostfs_unlink not implemented!\n");
+int hostfs_unlink(struct vinode *parent, struct dentry *sub_dentry, struct vinode *unlink_node)
+{
+  kill_current_process("hostfs_unlink not implemented!\n", -1);
   return -1;
 }
 
-int hostfs_readdir(struct vinode *dir_vinode, struct dir *dir, int *offset) {
-  panic("hostfs_readdir not implemented!\n");
+int hostfs_readdir(struct vinode *dir_vinode, struct dir *dir, int *offset)
+{
+  kill_current_process("hostfs_readdir not implemented!\n", -1);
   return -1;
 }
 
-struct vinode *hostfs_mkdir(struct vinode *parent, struct dentry *sub_dentry) {
-  panic("hostfs_mkdir not implemented!\n");
+struct vinode *hostfs_mkdir(struct vinode *parent, struct dentry *sub_dentry)
+{
+  kill_current_process("hostfs_mkdir not implemented!\n", -1);
   return NULL;
 }
 
@@ -260,13 +294,16 @@ struct vinode *hostfs_mkdir(struct vinode *parent, struct dentry *sub_dentry) {
 //
 // open a hostfs file (after having its vfs inode).
 //
-int hostfs_hook_open(struct vinode *f_inode, struct dentry *f_dentry) {
-  if (f_inode->i_fs_info != NULL) return 0;
+int hostfs_hook_open(struct vinode *f_inode, struct dentry *f_dentry)
+{
+  if (f_inode->i_fs_info != NULL)
+    return 0;
 
   char path[MAX_PATH_LEN];
   get_path_string(path, f_dentry);
   spike_file_t *f = spike_file_open(path, O_RDWR, 0);
-  if ((int64)f < 0) {
+  if ((int64)f < 0)
+  {
     sprint("hostfs_hook_open cannot open the given file.\n");
     return -1;
   }
@@ -278,14 +315,16 @@ int hostfs_hook_open(struct vinode *f_inode, struct dentry *f_dentry) {
 //
 // close a hostfs file.
 //
-int hostfs_hook_close(struct vinode *f_inode, struct dentry *dentry) {
+int hostfs_hook_close(struct vinode *f_inode, struct dentry *dentry)
+{
   spike_file_t *f = (spike_file_t *)f_inode->i_fs_info;
   spike_file_close(f);
   return 0;
 }
 
 /**** vfs-hostfs file system type interface functions ****/
-struct super_block *hostfs_get_superblock(struct device *dev) {
+struct super_block *hostfs_get_superblock(struct device *dev)
+{
   // set the data for the vfs super block
   struct super_block *sb = alloc_page();
   sb->s_dev = dev;

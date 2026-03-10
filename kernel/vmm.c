@@ -10,6 +10,7 @@
 #include "util/string.h"
 #include "spike_interface/spike_utils.h"
 #include "util/functions.h"
+#include "sched.h"
 
 /* --- utility functions for virtual address mapping --- */
 //
@@ -27,7 +28,7 @@ int map_pages(pagetable_t page_dir, uint64 va, uint64 size, uint64 pa, int perm)
     if ((pte = page_walk(page_dir, first, 1)) == 0)
       return -1;
     if (*pte & PTE_V)
-      panic("map_pages fails on mapping va (0x%lx) to pa (0x%lx)", first, pa);
+      kill_current_process("map_pages fails on mapping va to pa", -1);
     *pte = PA2PTE(pa) | perm | PTE_V;
   }
   return 0;
@@ -59,7 +60,7 @@ uint64 prot_to_type(int prot, int user)
 pte_t *page_walk(pagetable_t page_dir, uint64 va, int alloc)
 {
   if (va >= MAXVA)
-    panic("page_walk");
+    kill_current_process("page_walk", -1);
 
   // starting from the page directory
   pagetable_t pt = page_dir;
@@ -132,7 +133,7 @@ void kern_vm_map(pagetable_t page_dir, uint64 va, uint64 pa, uint64 sz, int perm
 {
   // map_pages is defined in kernel/vmm.c
   if (map_pages(page_dir, va, sz, pa, perm) != 0)
-    panic("kern_vm_map");
+    kill_current_process("kern_vm_map", -1);
 }
 
 //
@@ -199,7 +200,7 @@ void user_vm_map(pagetable_t page_dir, uint64 va, uint64 size, uint64 pa, int pe
 {
   if (map_pages(page_dir, va, size, pa, perm) != 0)
   {
-    panic("fail to user_vm_map .\n");
+    kill_current_process("fail to user_vm_map .\n", -1);
   }
 }
 
@@ -219,16 +220,16 @@ void user_vm_unmap(pagetable_t page_dir, uint64 va, uint64 size, int free)
   pte_t *pte;
 
   if ((va % PGSIZE) != 0)
-    panic("not aligned");
+    kill_current_process("not aligned", -1);
 
   for (uint64 a = va; a < va + size; a += PGSIZE)
   {
     if ((pte = page_walk(page_dir, a, 0)) == 0)
-      panic("not find");
+      kill_current_process("not find", -1);
     if ((*pte & PTE_V) == 0)
-      panic("not mapped");
+      kill_current_process("not mapped", -1);
     if (PTE_FLAGS(*pte) == PTE_V)
-      panic("not leaf");
+      kill_current_process("not leaf", -1);
     if (free)
     {
       uint64 pa = PTE2PA(*pte);
@@ -293,7 +294,7 @@ void user_vm_map_cow(pagetable_t page_dir, uint64 va, uint64 size, uint64 pa)
     if ((pte = page_walk(page_dir, first, 1)) == 0)
       return;
     if (*pte & PTE_V)
-      panic("user_vm_map_cow: va 0x%lx already mapped", first);
+      kill_current_process("user_vm_map_cow: va 0x%lx already mapped", first);
     *pte = PA2PTE(pa) | perm;
   }
 }

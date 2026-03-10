@@ -671,7 +671,7 @@ void do_semP(uint64 sid)
   int tp = read_tp();
   if (sid >= (uint64)NSEM || sem_table[sid].ifuse == 0)
   {
-    panic("do_semP: invalid sid\n");
+    kill_current_process("do_semP: invalid sid\n", -1);
     return;
   }
   semaphore *sem = &sem_table[sid];
@@ -701,7 +701,7 @@ void do_semV(uint64 sid)
 {
   if (sid >= (uint64)NSEM || sem_table[sid].ifuse == 0)
   {
-    panic("do_semV: invalid sid\n");
+    kill_current_process("do_semV: invalid sid\n", -1);
     return;
   }
   semaphore *sem = &sem_table[sid];
